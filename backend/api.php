@@ -9,6 +9,8 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method === 'POST') {
     verify_csrf();
+    // Pembatasan laju umum untuk aksi tulis, terpisah dari penguncian login.
+    rate_limit('api:' . $action, RATE_LIMIT_PER_MENIT, 60);
 }
 
 try {
@@ -81,12 +83,33 @@ function route(string $action, string $method): void
 
         case 'absensi.checkin':
             $user = require_role(['karyawan']);
-            $res = do_checkin($user, (string) param('barcode', ''), param('foto'));
+            rate_limit('absensi', RATE_LIMIT_ABSEN, 60, 'Terlalu banyak percobaan absen. Tunggu sebentar lalu coba lagi.');
+            $res = do_checkin(
+                $user,
+                (string) param('barcode', ''),
+                param('foto'),
+                param('lat'),
+                param('lng'),
+                param('akurasi'),
+                param('mode') ? (string) param('mode') : null,
+                (bool) param('palsu', false)
+            );
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Absen masuk berhasil']);
 
         case 'absensi.checkout':
             $user = require_role(['karyawan']);
-            $res = do_checkout($user, (string) param('barcode', ''), param('foto'));
+            rate_limit('absensi', RATE_LIMIT_ABSEN, 60, 'Terlalu banyak percobaan absen. Tunggu sebentar lalu coba lagi.');
+            $res = do_checkout(
+                $user,
+                (string) param('barcode', ''),
+                param('foto'),
+                param('lat'),
+                param('lng'),
+                param('akurasi'),
+                param('mode') ? (string) param('mode') : null,
+                (bool) param('palsu', false),
+                param('kegiatan') ? (string) param('kegiatan') : null
+            );
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Absen pulang berhasil']);
 
         case 'absensi.izin':
@@ -209,12 +232,29 @@ function update_org(array $user): void
     if (!$hari) {
         json_error('Pilih minimal satu hari kerja.', 422);
     }
-    $kode = trim((string) param('kode_lokasi', ''));
+    $kode = clean_text(param('kode_lokasi', ''), 100);
     if ($kode === '') {
         json_error('Kode lokasi barcode wajib diisi.', 422);
     }
 
-    $stmt = db()->prepare('UPDATE organisasi SET nama = ?, industri = ?, kode_lokasi = ?, jam_masuk = ?, jam_pulang = ?, toleransi_menit = ?, hari_kerja = ?, wajib_foto = ?, wajib_barcode = ? WHERE id = ?');
+    // Konfigurasi GPS kantor & radius.
+    $wajibGps = (int) (bool) param('wajib_gps', 0);
+    $radius = max(0, min(100000, (int) param('radius_masuk_m', 0)));
+    $latRaw = param('lat_kantor', '');
+    $lngRaw = param('lng_kantor', '');
+    $latKantor = ($latRaw === '' || $latRaw === null) ? null : (float) $latRaw;
+    $lngKantor = ($lngRaw === '' || $lngRaw === null) ? null : (float) $lngRaw;
+    if ($latKantor !== null && ($latKantor < -90 || $latKantor > 90)) {
+        json_error('Latitude kantor tidak valid.', 422);
+    }
+    if ($lngKantor !== null && ($lngKantor < -180 || $lngKantor > 180)) {
+        json_error('Longitude kantor tidak valid.', 422);
+    }
+    if (($radius > 0 || $wajibGps) && ($latKantor === null || $lngKantor === null)) {
+        json_error('Isi koordinat kantor terlebih dahulu sebelum mengaktifkan GPS/radius.', 422);
+    }
+
+    $stmt = db()->prepare('UPDATE organisasi SET nama = ?, industri = ?, kode_lokasi = ?, jam_masuk = ?, jam_pulang = ?, toleransi_menit = ?, hari_kerja = ?, wajib_foto = ?, wajib_barcode = ?, lat_kantor = ?, lng_kantor = ?, radius_masuk_m = ?, wajib_gps = ? WHERE id = ?');
     $stmt->execute([
         $nama,
         $industri,
@@ -225,9 +265,13 @@ function update_org(array $user): void
         implode(',', $hari),
         (int) (bool) param('wajib_foto', 1),
         (int) (bool) param('wajib_barcode', 1),
+        $latKantor,
+        $lngKantor,
+        $radius,
+        $wajibGps,
         $user['organisasi_id'],
     ]);
-    write_audit((int) $user['id'], (int) $user['organisasi_id'], 'update_org', "preset={$industri}");
+    write_audit((int) $user['id'], (int) $user['organisasi_id'], 'update_org', "preset={$industri} gps={$wajibGps} radius={$radius}");
 }
 
 function list_karyawan(int $orgId): array
@@ -246,11 +290,11 @@ function list_tim(int $orgId): array
 
 function save_karyawan(array $actor, array $data): int
 {
-    $nama = trim((string) ($data['nama'] ?? ''));
+    $nama = clean_text($data['nama'] ?? '', 150);
     $email = strtolower(trim((string) ($data['email'] ?? '')));
     $peran = (string) ($data['peran'] ?? 'karyawan');
-    $tim = trim((string) ($data['tim'] ?? 'Umum')) ?: 'Umum';
-    $jabatan = trim((string) ($data['jabatan'] ?? ''));
+    $tim = clean_text($data['tim'] ?? '', 100) ?: 'Umum';
+    $jabatan = clean_text($data['jabatan'] ?? '', 100);
     $aktif = isset($data['aktif']) ? (int) (bool) $data['aktif'] : 1;
     $id = (int) ($data['id'] ?? 0);
     $password = (string) ($data['kata_sandi'] ?? '');
@@ -323,6 +367,10 @@ function own_today(array $user): array
         'jam_masuk_jadwal' => $org['jam_masuk'],
         'jam_pulang_jadwal' => $org['jam_pulang'],
         'toleransi_menit' => (int) $org['toleransi_menit'],
+        'wajib_gps' => (int) ($org['wajib_gps'] ?? 0) === 1,
+        'radius_masuk_m' => (int) ($org['radius_masuk_m'] ?? 0),
+        'lat_kantor' => isset($org['lat_kantor']) && $org['lat_kantor'] !== null ? (float) $org['lat_kantor'] : null,
+        'lng_kantor' => isset($org['lng_kantor']) && $org['lng_kantor'] !== null ? (float) $org['lng_kantor'] : null,
     ];
 }
 

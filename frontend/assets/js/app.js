@@ -176,6 +176,7 @@
         <div class="glass card clock-card">
           <div class="clock-time tabular" id="clock">--:--:--</div>
           <div class="clock-date">${d.hari_kerja ? `Jadwal ${esc(d.jam_masuk_jadwal)}â€“${esc(d.jam_pulang_jadwal)} Â· toleransi ${d.toleransi_menit} menit` : 'Hari ini bukan hari kerja'}</div>
+          ${(d.wajib_gps || d.radius_masuk_m > 0) ? `<div class="clock-date">${d.radius_masuk_m > 0 ? `Wajib berada dalam radius ${d.radius_masuk_m} m dari kantor` : 'GPS wajib aktif saat absen'}</div>` : ''}
           <div class="absen-actions">
             <button class="btn ${state_absen === 'done' ? 'btn-secondary' : 'btn-primary'} btn-lg big-cta" id="absen-btn" ${state_absen === 'done' ? 'disabled' : ''}>
               ${state_absen === 'in' ? ico('clock') : ''}${btnLabel}
@@ -215,11 +216,25 @@
           const shot = await Scanner.open({
             wajibBarcode: d.wajib_barcode,
             wajibFoto: d.wajib_foto,
+            wajibGps: d.wajib_gps,
+            radius: d.radius_masuk_m,
+            latKantor: d.lat_kantor,
+            lngKantor: d.lng_kantor,
             kodeLokasi: d.kode_lokasi,
             title: state_absen === 'in' ? 'Check-in' : 'Check-out'
           });
           const action = state_absen === 'in' ? 'absensi.checkin' : 'absensi.checkout';
-          const r = await Api.post(action, { barcode: shot.barcode, foto: shot.foto });
+          const payload = {
+            barcode: shot.barcode,
+            foto: shot.foto,
+            palsu: shot.palsu ? true : false
+          };
+          if (shot.gps) {
+            payload.lat = shot.gps.lat;
+            payload.lng = shot.gps.lng;
+            payload.akurasi = shot.gps.akurasi;
+          }
+          const r = await Api.post(action, payload);
           toast(r.pesan || 'Berhasil');
           await go('beranda');
         } catch (err) {
@@ -702,10 +717,21 @@
             </div>
             <div class="field"><span>Hari kerja</span><div class="grid grid-3">${hariBoxes}</div></div>
             <label class="field"><span>Kode lokasi (isi barcode/QR yang ditempel di lokasi)</span><input id="o-kode" value="${esc(o.kode_lokasi)}" required></label>
+            <div class="field">
+              <span>Validasi lokasi (GPS &amp; radius)</span>
+              <div class="muted small" style="margin-bottom:8px">Koordinat kantor dipakai peladen untuk menghitung ulang jarak absensi (Haversine). Perangkat tidak dipercaya.</div>
+              <button type="button" class="btn btn-secondary btn-sm" id="o-ambil-lokasi">Ambil lokasi kantor saat ini</button>
+              <div class="field-row" style="margin-top:8px">
+                <label class="field"><span>Latitude</span><input id="o-lat" type="number" step="any" value="${o.lat_kantor != null && o.lat_kantor !== '' ? esc(String(o.lat_kantor)) : ''}" placeholder="-6.2000000"></label>
+                <label class="field"><span>Longitude</span><input id="o-lng" type="number" step="any" value="${o.lng_kantor != null && o.lng_kantor !== '' ? esc(String(o.lng_kantor)) : ''}" placeholder="106.8166667"></label>
+                <label class="field"><span>Radius (meter)</span><input id="o-radius" type="number" min="0" max="100000" value="${Number(o.radius_masuk_m) || 0}"></label>
+              </div>
+            </div>
             <div class="field-row">
               <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="o-foto" ${Number(o.wajib_foto) ? 'checked' : ''}> <span>Wajib foto saat absen</span></label>
               <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="o-barcode" ${Number(o.wajib_barcode) ? 'checked' : ''}> <span>Wajib pindai barcode</span></label>
             </div>
+            <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="o-gps" ${Number(o.wajib_gps) ? 'checked' : ''}> <span>Wajib GPS saat absen (tolak mock location)</span></label>
             <div class="alert alert-error" id="o-err" hidden></div>
             <button class="btn btn-primary" type="submit">Simpan perubahan</button>
           </form>
@@ -734,6 +760,24 @@
     renderQr(o.kode_lokasi);
     byId('o-kode').addEventListener('input', (e) => renderQr(e.target.value));
 
+    byId('o-ambil-lokasi').addEventListener('click', async () => {
+      const btnLok = byId('o-ambil-lokasi');
+      btnLok.disabled = true;
+      btnLok.textContent = 'Mengambil lokasi…';
+      try {
+        const loc = await Scanner.acquireLocation({ targetAkurasi: 25 });
+        if (!loc.ok) { toast(loc.error, 'err'); return; }
+        byId('o-lat').value = loc.lat.toFixed(7);
+        byId('o-lng').value = loc.lng.toFixed(7);
+        toast(`Lokasi kantor tersimpan (akurasi ±${loc.akurasi} m)`);
+      } catch (e) {
+        toast('Gagal mengambil lokasi.', 'err');
+      } finally {
+        btnLok.disabled = false;
+        btnLok.textContent = 'Ambil lokasi kantor saat ini';
+      }
+    });
+
     byId('o-industri').addEventListener('change', (e) => {
       const p = presets[e.target.value];
       if (!p) return;
@@ -760,7 +804,11 @@
           hari_kerja: hariKerja,
           kode_lokasi: byId('o-kode').value,
           wajib_foto: byId('o-foto').checked ? 1 : 0,
-          wajib_barcode: byId('o-barcode').checked ? 1 : 0
+          wajib_barcode: byId('o-barcode').checked ? 1 : 0,
+          lat_kantor: byId('o-lat').value,
+          lng_kantor: byId('o-lng').value,
+          radius_masuk_m: Number(byId('o-radius').value) || 0,
+          wajib_gps: byId('o-gps').checked ? 1 : 0
         });
         state.org = res.organisasi;
         byId('side-org').textContent = state.org.nama;

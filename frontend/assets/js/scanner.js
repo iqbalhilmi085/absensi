@@ -21,6 +21,113 @@ const Scanner = (() => {
     return el;
   }
 
+  // ---------------- Kompresi gambar di sisi klien ----------------
+  // Mengubah data URL menjadi JPEG terkompresi agar unggahan cepat dan
+  // hemat penyimpanan peladen.
+  function compress(dataUrl, maxW = 720, quality = 0.8) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const ratio = img.height / img.width;
+        const w = Math.min(maxW, img.width);
+        const ht = Math.max(1, Math.round(w * ratio));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = ht;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, ht);
+        try {
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  // ---------------- GPS ----------------
+  function haversine(aLat, aLng, bLat, bLng) {
+    const R = 6371000;
+    const dLat = ((bLat - aLat) * Math.PI) / 180;
+    const dLng = ((bLng - aLng) * Math.PI) / 180;
+    const s = Math.sin(dLat / 2) ** 2 +
+      Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return Math.round(R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s)));
+  }
+
+  function geoErrorMessage(err) {
+    if (!err) return 'Lokasi tidak tersedia.';
+    switch (err.code) {
+      case 1: return 'Izin lokasi ditolak. Aktifkan izin lokasi untuk situs ini di pengaturan peramban, lalu coba lagi.';
+      case 2: return 'Lokasi tidak dapat ditemukan. Pastikan GPS aktif dan Anda berada di area terbuka.';
+      case 3: return 'Pengambilan lokasi melebihi batas waktu. Coba lagi di area dengan sinyal lebih baik.';
+      default: return 'Gagal mendapatkan lokasi: ' + (err.message || 'kesalahan tidak diketahui');
+    }
+  }
+
+  /**
+   * Mengambil titik lokasi dengan akurasi tertinggi menggunakan sensor
+   * perangkat. Menampung beberapa sampel lalu memilih yang paling akurat
+   * dalam jendela waktu tertentu.
+   *
+   * Deteksi GPS palsu bersifat heuristik (peramban tidak menyediakan API
+   * mock-location resmi): akurasi mustahil (0), koordinat (0,0), atau
+   * lompatan melebihi kecepatan fisik wajar.
+   */
+  function acquireLocation(opts = {}) {
+    const targetAkurasi = opts.targetAkurasi || 30;
+    const maxWaitMs = opts.maxWaitMs || 12000;
+    return new Promise((resolve) => {
+      if (!('geolocation' in navigator)) {
+        resolve({ ok: false, error: 'Peramban ini tidak mendukung layanan lokasi (GPS).' });
+        return;
+      }
+      let best = null;
+      let prev = null;
+      let palsu = false;
+      let lastError = null;
+      let selesai = false;
+
+      const finish = () => {
+        if (selesai) return;
+        selesai = true;
+        clearTimeout(deadline);
+        try { navigator.geolocation.clearWatch(watchId); } catch (e) { /* noop */ }
+        if (best) resolve({ ok: true, lat: best.lat, lng: best.lng, akurasi: best.akurasi, palsu });
+        else resolve({ ok: false, error: geoErrorMessage(lastError) || 'Lokasi tidak tersedia.' });
+      };
+
+      const deadline = setTimeout(finish, maxWaitMs);
+
+      const watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const c = pos.coords;
+          const lat = c.latitude;
+          const lng = c.longitude;
+          const akurasi = Number(c.accuracy);
+
+          if (lat === 0 && lng === 0) palsu = true;
+          if (!isFinite(akurasi) || akurasi <= 0 || akurasi < 1) palsu = true;
+
+          if (prev) {
+            const dt = Math.max(0.001, (pos.timestamp - prev.t) / 1000);
+            const jarak = haversine(prev.lat, prev.lng, lat, lng);
+            if (jarak / dt > 300) palsu = true;
+          }
+          prev = { lat, lng, t: pos.timestamp };
+
+          if (!best || akurasi < best.akurasi) {
+            best = { lat, lng, akurasi: Math.round(akurasi) };
+          }
+          if (akurasi <= targetAkurasi) finish();
+        },
+        (err) => { lastError = err; if (!best) finish(); },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: maxWaitMs }
+      );
+    });
+  }
+
   async function getStream(facing) {
     stopCamera();
     stream = await navigator.mediaDevices.getUserMedia({
@@ -31,9 +138,20 @@ const Scanner = (() => {
 
   function open(options) {
     const opt = Object.assign(
-      { wajibBarcode: true, wajibFoto: true, kodeLokasi: '', title: 'Absen' },
+      {
+        wajibBarcode: true,
+        wajibFoto: true,
+        wajibGps: false,
+        radius: 0,
+        latKantor: null,
+        lngKantor: null,
+        kodeLokasi: '',
+        title: 'Absen'
+      },
       options
     );
+
+    const butuhGps = !!(opt.wajibGps || opt.radius > 0);
 
     return new Promise((resolve, reject) => {
       const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true' });
@@ -41,7 +159,15 @@ const Scanner = (() => {
       overlay.append(modal);
       document.body.append(overlay);
 
-      const state = { barcode: null, foto: null, phase: null };
+      const state = {
+        barcode: null,
+        foto: null,
+        gps: null,
+        gpsError: '',
+        gpsLoading: false,
+        palsu: false,
+        phase: null
+      };
       const cleanup = () => { stopCamera(); overlay.remove(); };
       const cancel = () => { cleanup(); reject(new Error('dibatalkan')); };
       const head = (title) => h('div', { class: 'modal-head' }, [
@@ -49,11 +175,45 @@ const Scanner = (() => {
         h('button', { class: 'icon-btn', onclick: cancel, 'aria-label': 'Tutup' }, '×')
       ]);
 
+      function jarakKeKantor(gps) {
+        if (!gps || opt.latKantor == null || opt.lngKantor == null) return null;
+        return haversine(opt.latKantor, opt.lngKantor, gps.lat, gps.lng);
+      }
+
+      function expectsBarcode() { return opt.wajibBarcode; }
+      function readyToSubmit() {
+        if (opt.wajibFoto && !state.foto) return false;
+        if (butuhGps && !state.gps) return false;
+        return true;
+      }
+
       function finish() {
-        if (opt.wajibFoto && !state.foto) return;
-        const result = { barcode: state.barcode, foto: state.foto };
+        if (!readyToSubmit()) return;
+        const result = {
+          barcode: state.barcode,
+          foto: state.foto,
+          gps: state.gps,
+          palsu: state.palsu
+        };
         cleanup();
         resolve(result);
+      }
+
+      // Mulai akuisisi lokasi sedini mungkin agar siap saat konfirmasi.
+      function mulaiGps() {
+        if (state.gpsLoading) return;
+        state.gpsLoading = true;
+        state.gpsError = '';
+        acquireLocation().then((res) => {
+          state.gpsLoading = false;
+          if (res.ok) {
+            state.gps = { lat: res.lat, lng: res.lng, akurasi: res.akurasi, jarak: jarakKeKantor(res) };
+            state.palsu = !!res.palsu;
+          } else {
+            state.gpsError = res.error;
+          }
+          if (state.phase === 'confirm') renderConfirm();
+        });
       }
 
       async function phaseScan() {
@@ -148,7 +308,7 @@ const Scanner = (() => {
         const actions = h('div', { class: 'form', style: 'margin-top:16px' });
         actions.append(
           h('button', { class: 'btn btn-primary btn-block btn-lg', id: 'btn-capture' }, 'Ambil foto'),
-          opt.wajibFoto ? null : h('button', { class: 'btn btn-secondary btn-block', onclick: finish }, 'Lewati foto'),
+          opt.wajibFoto ? null : h('button', { class: 'btn btn-secondary btn-block', onclick: goConfirm }, 'Lewati foto'),
           h('button', { class: 'btn btn-ghost btn-block', onclick: cancel }, 'Batal')
         );
         modal.append(
@@ -166,17 +326,20 @@ const Scanner = (() => {
         } catch (e) {
           modal.querySelector('.cam-status').textContent = 'Kamera tidak tersedia. Unggah foto sebagai gantinya.';
           const file = h('input', { type: 'file', accept: 'image/*' });
-          file.addEventListener('change', () => {
+          file.addEventListener('change', async () => {
             const f = file.files && file.files[0];
             if (!f) return;
             const reader = new FileReader();
-            reader.onload = () => { state.foto = reader.result; goConfirm(); };
+            reader.onload = async () => {
+              state.foto = await compress(reader.result, 720, 0.8);
+              goConfirm();
+            };
             reader.readAsDataURL(f);
           });
           actions.insertBefore(file, actions.firstChild);
         }
 
-        modal.querySelector('#btn-capture').addEventListener('click', () => {
+        modal.querySelector('#btn-capture').addEventListener('click', async () => {
           if (!video.videoWidth) return;
           const shot = document.createElement('canvas');
           const maxW = 720;
@@ -184,23 +347,57 @@ const Scanner = (() => {
           shot.width = Math.min(maxW, video.videoWidth);
           shot.height = Math.round(shot.width * ratio);
           shot.getContext('2d').drawImage(video, 0, 0, shot.width, shot.height);
-          state.foto = shot.toDataURL('image/jpeg', 0.82);
+          state.foto = await compress(shot.toDataURL('image/jpeg', 0.82), 720, 0.8);
           goConfirm();
         });
       }
 
-      function phaseConfirm() {
-        state.phase = 'confirm';
-        modal.innerHTML = '';
+      function renderConfirm() {
         const info = h('div', { class: 'stack', style: 'margin-top:16px' });
         if (opt.wajibBarcode) {
           info.append(h('div', { class: 'riwayat-row' }, [
             h('span', { class: 't' }, 'Barcode'), h('span', { class: 's' }, state.barcode || '-')
           ]));
         }
+
+        // Status lokasi.
+        let lokasiText = 'Lokasi GPS tidak diperlukan.';
+        let lokasiClass = 'muted small';
+        if (butuhGps || state.gpsLoading || state.gps || state.gpsError) {
+          if (state.gpsLoading) {
+            lokasiText = 'Mengambil lokasi GPS (akurasi tertinggi)…';
+          } else if (state.gps) {
+            const j = state.gps.jarak;
+            lokasiText = `Lokasi siap · akurasi ±${state.gps.akurasi} m` +
+              (j != null ? ` · jarak ${j} m dari kantor` : '') +
+              (state.palsu ? ' · peringatan: lokasi mencurigakan' : '');
+          } else if (state.gpsError) {
+            lokasiText = state.gpsError;
+            lokasiClass = 'alert alert-error';
+          } else {
+            lokasiText = 'Menunggu lokasi…';
+          }
+        }
+        const lokasiEl = h('div', { class: lokasiClass, id: 'loc-status' }, lokasiText);
+        if (butuhGps && !state.gps && !state.gpsLoading) {
+          lokasiEl.append(h('button', {
+            class: 'btn btn-secondary btn-sm', style: 'margin-top:8px;width:100%',
+            onclick: () => { state.gpsError = ''; mulaiGps(); renderConfirm(); }
+          }, 'Coba ambil lokasi lagi'));
+        }
+
+        const siap = readyToSubmit();
+        const kirim = h('button', {
+          class: 'btn btn-primary btn-block btn-lg',
+          id: 'btn-send',
+          disabled: !siap,
+          onclick: finish
+        }, siap ? 'Kirim absen' : (state.gpsLoading ? 'Menunggu lokasi…' : 'Lengkapi data…'));
+
         info.append(
-          h('button', { class: 'btn btn-primary btn-block btn-lg', onclick: finish }, 'Kirim absen'),
-          h('button', { class: 'btn btn-secondary btn-block', onclick: () => (opt.wajibBarcode ? phaseScan() : phasePhoto()) }, 'Ulangi'),
+          h('div', { class: 'riwayat-row' }, [h('span', { class: 't' }, 'Lokasi'), lokasiEl]),
+          kirim,
+          h('button', { class: 'btn btn-secondary btn-block', onclick: () => (expectsBarcode() ? phaseScan() : phasePhoto()) }, 'Ulangi'),
           h('button', { class: 'btn btn-ghost btn-block', onclick: cancel }, 'Batal')
         );
         modal.append(
@@ -210,13 +407,20 @@ const Scanner = (() => {
         );
       }
 
+      function phaseConfirm() {
+        state.phase = 'confirm';
+        modal.innerHTML = '';
+        renderConfirm();
+      }
+
       function goPhoto() { stopCamera(); phasePhoto(); }
       function goConfirm() { stopCamera(); phaseConfirm(); }
 
+      if (butuhGps) mulaiGps();
       if (opt.wajibBarcode) phaseScan();
       else phasePhoto();
     });
   }
 
-  return { open };
+  return { open, acquireLocation, compress };
 })();

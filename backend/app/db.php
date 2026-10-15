@@ -43,6 +43,10 @@ function init_schema(PDO $pdo): void
             hari_kerja      VARCHAR(20)  NOT NULL DEFAULT '1,2,3,4,5',
             wajib_foto      TINYINT(1)   NOT NULL DEFAULT 1,
             wajib_barcode   TINYINT(1)   NOT NULL DEFAULT 1,
+            lat_kantor      DECIMAL(10,7) NULL,
+            lng_kantor      DECIMAL(10,7) NULL,
+            radius_masuk_m  INT          NOT NULL DEFAULT 0,
+            wajib_gps       TINYINT(1)   NOT NULL DEFAULT 0,
             dibuat_pada     DATETIME     NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 
@@ -91,6 +95,16 @@ function init_schema(PDO $pdo): void
             foto_pulang     VARCHAR(190) NULL,
             barcode_masuk   VARCHAR(190) NULL,
             barcode_pulang  VARCHAR(190) NULL,
+            lat_masuk       DECIMAL(10,7) NULL,
+            lng_masuk       DECIMAL(10,7) NULL,
+            lat_pulang      DECIMAL(10,7) NULL,
+            lng_pulang      DECIMAL(10,7) NULL,
+            akurasi_masuk   INT          NULL,
+            akurasi_pulang  INT          NULL,
+            jarak_masuk_m   INT          NULL,
+            jarak_pulang_m  INT          NULL,
+            mode            VARCHAR(20)  NOT NULL DEFAULT '',
+            kegiatan        VARCHAR(500) NOT NULL DEFAULT '',
             dikoreksi_oleh  INT          NULL,
             dibuat_pada     DATETIME     NOT NULL,
             diperbarui_pada DATETIME     NOT NULL,
@@ -128,9 +142,65 @@ function init_schema(PDO $pdo): void
             dibuat_pada DATETIME     NOT NULL,
             KEY idx_attempt (email, ip, sukses, dibuat_pada)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        "CREATE TABLE IF NOT EXISTS rate_limit (
+            id          INT AUTO_INCREMENT PRIMARY KEY,
+            kunci       VARCHAR(190) NOT NULL,
+            ip          VARCHAR(45)  NOT NULL,
+            pengguna_id INT          NULL,
+            dibuat_pada DATETIME     NOT NULL,
+            KEY idx_rate (kunci, ip, dibuat_pada)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
 
     foreach ($statements as $sql) {
         $pdo->exec($sql);
     }
+
+    migrate_schema($pdo);
+}
+
+/**
+ * Menambahkan kolom baru pada tabel yang sudah ada (idempoten).
+ * MySQL 8 tidak mendukung "ADD COLUMN IF NOT EXISTS", jadi dicek via
+ * INFORMATION_SCHEMA terlebih dahulu.
+ */
+function migrate_schema(PDO $pdo): void
+{
+    $kolom = [
+        'organisasi' => [
+            'lat_kantor'     => 'DECIMAL(10,7) NULL',
+            'lng_kantor'     => 'DECIMAL(10,7) NULL',
+            'radius_masuk_m' => 'INT NOT NULL DEFAULT 0',
+            'wajib_gps'      => 'TINYINT(1) NOT NULL DEFAULT 0',
+        ],
+        'absensi' => [
+            'lat_masuk'      => 'DECIMAL(10,7) NULL',
+            'lng_masuk'      => 'DECIMAL(10,7) NULL',
+            'lat_pulang'     => 'DECIMAL(10,7) NULL',
+            'lng_pulang'     => 'DECIMAL(10,7) NULL',
+            'akurasi_masuk'  => 'INT NULL',
+            'akurasi_pulang' => 'INT NULL',
+            'jarak_masuk_m'  => 'INT NULL',
+            'jarak_pulang_m' => 'INT NULL',
+            'mode'           => "VARCHAR(20) NOT NULL DEFAULT ''",
+            'kegiatan'       => "VARCHAR(500) NOT NULL DEFAULT ''",
+        ],
+    ];
+
+    foreach ($kolom as $tabel => $definisi) {
+        $ada = table_columns($pdo, $tabel);
+        foreach ($definisi as $nama => $sql) {
+            if (!in_array($nama, $ada, true)) {
+                $pdo->exec("ALTER TABLE `{$tabel}` ADD COLUMN `{$nama}` {$sql}");
+            }
+        }
+    }
+}
+
+function table_columns(PDO $pdo, string $tabel): array
+{
+    $stmt = $pdo->prepare('SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?');
+    $stmt->execute([$tabel]);
+    return array_map('strval', array_column($stmt->fetchAll(), 'COLUMN_NAME'));
 }

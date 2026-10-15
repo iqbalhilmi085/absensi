@@ -24,6 +24,18 @@ define('LOGIN_MAX_FAILS', 5);        // jumlah percobaan gagal sebelum dikunci
 define('LOGIN_LOCK_MINUTES', 15);    // lama penguncian (menit)
 define('MIN_ADMIN_PASSWORD', 8);     // panjang minimal kata sandi admin
 
+// Validasi berkas foto (Fase 2 — pengerasan backend)
+define('MAX_FOTO_BYTES', 4 * 1024 * 1024); // 4 MB sebelum kompresi klien
+define('MAX_FOTO_DIMENSI', 6000);          // piksel maksimum per sisi
+
+// GPS & radius (Fase 2)
+define('GPS_AKURASI_MAKS_M', 100);   // akurasi (meter) dianggap wajar saat radius aktif
+define('GPS_KECEPATAN_MAKS', 300);   // m/s — di atas ini dianggap lompatan tidak wajar
+
+// Pembatasan laju permintaan (rate limit) per menit
+define('RATE_LIMIT_PER_MENIT', 60);  // umum untuk aksi tulis
+define('RATE_LIMIT_ABSEN', 10);      // khusus check-in / check-out / izin per menit
+
 // Preset industri: mengisi jam masuk, jam pulang, toleransi, hari kerja (F-01).
 // 1=Senin ... 7=Minggu
 function preset_industri(): array

@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/db.php';
 
 function get_org(int $orgId): array
@@ -44,7 +45,72 @@ function hitung_status_masuk(array $org, string $jamMasuk): string
     return strtotime(date('Y-m-d') . ' ' . $jamMasuk) > $batas ? 'terlambat' : 'hadir';
 }
 
-function do_checkin(array $user, ?string $barcode, ?string $foto): array
+function mode_options(): array
+{
+    return ['wfo', 'wfh', 'on_call', 'piket', 'ijin'];
+}
+
+/**
+ * Validasi koordinat GPS di sisi peladen. Peladen TIDAK mempercayai klaim
+ * jarak dari perangkat: koordinat dihitung ulang terhadap lokasi kantor
+ * memakai Haversine. Mengembalikan lat, lng, akurasi, dan jarak (meter).
+ */
+function resolve_gps(array $org, $latRaw, $lngRaw, $akurasiRaw, bool $palsu): array
+{
+    $kosong = ['lat' => null, 'lng' => null, 'akurasi' => null, 'jarak' => null];
+    $wajib = (int) ($org['wajib_gps'] ?? 0) === 1;
+    $radius = (int) ($org['radius_masuk_m'] ?? 0);
+    $adaKoordinat = $latRaw !== null && $latRaw !== '' && $lngRaw !== null && $lngRaw !== '';
+
+    if (!$wajib && $radius === 0 && !$adaKoordinat) {
+        return $kosong;
+    }
+    if (!$adaKoordinat) {
+        json_error('Lokasi GPS wajib diaktifkan untuk absen. Izinkan akses lokasi di peramban lalu coba lagi.', 422);
+    }
+
+    $lat = (float) $latRaw;
+    $lng = (float) $lngRaw;
+    if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+        json_error('Koordinat lokasi di luar rentang yang valid.', 422);
+    }
+    if (abs($lat) < 0.0000001 && abs($lng) < 0.0000001) {
+        json_error('Koordinat lokasi tidak valid (0,0). Nyalakan GPS perangkat Anda.', 422);
+    }
+
+    $akurasi = ($akurasiRaw === null || $akurasiRaw === '') ? null : (int) $akurasiRaw;
+    if ($akurasi !== null && ($akurasi < 0 || $akurasi > 100000)) {
+        json_error('Nilai akurasi GPS tidak wajar.', 422);
+    }
+
+    if ($palsu) {
+        json_error('Terdeteksi lokasi tidak asli (kemungkinan GPS palsu). Nonaktifkan aplikasi mock location lalu coba lagi.', 422);
+    }
+
+    $jarak = null;
+    $oLat = $org['lat_kantor'] ?? null;
+    $oLng = $org['lng_kantor'] ?? null;
+    if ($oLat !== null && $oLat !== '' && $oLng !== null && $oLng !== '') {
+        $jarak = haversine_meter((float) $oLat, (float) $oLng, $lat, $lng);
+    }
+
+    if ($radius > 0) {
+        if ($jarak === null) {
+            json_error('Lokasi kantor belum dikonfigurasi admin, sehingga radius tidak dapat diverifikasi.', 422);
+        }
+        $batasAkurasi = max(GPS_AKURASI_MAKS_M, $radius);
+        if ($akurasi !== null && $akurasi > $batasAkurasi) {
+            json_error("Sinyal GPS lemah (akurasi ±{$akurasi} m). Keluar ke area terbuka lalu coba lagi.", 422);
+        }
+        if ($jarak > $radius) {
+            json_error("Anda berada {$jarak} m dari kantor — di luar radius {$radius} m yang diizinkan.", 422);
+        }
+    }
+
+    return ['lat' => $lat, 'lng' => $lng, 'akurasi' => $akurasi, 'jarak' => $jarak];
+}
+
+function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false): array
 {
     $org = get_org((int) $user['organisasi_id']);
     if (!valid_barcode($org, $barcode)) {
@@ -53,31 +119,47 @@ function do_checkin(array $user, ?string $barcode, ?string $foto): array
     if ((int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto wajib diambil untuk absen masuk.', 422);
     }
-
-    $existing = today_record((int) $user['id']);
-    if ($existing && $existing['jam_masuk']) {
-        json_error('Anda sudah melakukan absen masuk hari ini.', 409);
-    }
-
-    $now = date('H:i:s');
-    $status = hitung_status_masuk($org, $now);
+    $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
+    $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu);
     $fotoName = save_photo($foto, 'masuk');
-    $ts = date('Y-m-d H:i:s');
-    $kodeLokasi = trim((string) $barcode);
 
-    if ($existing) {
-        $stmt = db()->prepare('UPDATE absensi SET status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
-        $stmt->execute([$status, $now, $fotoName, $kodeLokasi, '', $ts, $existing['id']]);
-    } else {
-        $stmt = db()->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $ts, $ts]);
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        // Kunci baris untuk mencegah absen ganda pada tanggal yang sama (race condition).
+        $stmt = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ? FOR UPDATE');
+        $stmt->execute([$user['id'], date('Y-m-d')]);
+        $existing = $stmt->fetch() ?: null;
+        if ($existing && $existing['jam_masuk']) {
+            $pdo->rollBack();
+            json_error('Anda sudah melakukan absen masuk hari ini.', 409);
+        }
+
+        // Zona waktu & jam diambil dari peladen, bukan dari perangkat klien.
+        $now = date('H:i:s');
+        $status = hitung_status_masuk($org, $now);
+        $ts = date('Y-m-d H:i:s');
+        $kodeLokasi = clean_text($barcode, 100);
+        if ($existing) {
+            $upd = $pdo->prepare('UPDATE absensi SET status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
+            $upd->execute([$status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, '', $ts, $existing['id']]);
+        } else {
+            $ins = $pdo->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $ins->execute([$user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $ts, $ts]);
+        }
+        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_in', "masuk {$now} status={$status} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode}");
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
     }
-    write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_in', "masuk {$now} status={$status}");
 
-    return ['status' => $status, 'jam_masuk' => $now, 'foto' => $fotoName];
+    return ['status' => $status, 'jam_masuk' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode];
 }
 
-function do_checkout(array $user, ?string $barcode, ?string $foto): array
+function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null): array
 {
     $org = get_org((int) $user['organisasi_id']);
     if (!valid_barcode($org, $barcode)) {
@@ -86,25 +168,43 @@ function do_checkout(array $user, ?string $barcode, ?string $foto): array
     if ((int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto wajib diambil untuk absen pulang.', 422);
     }
-
-    $existing = today_record((int) $user['id']);
-    if (!$existing || !$existing['jam_masuk']) {
-        json_error('Anda belum melakukan absen masuk hari ini.', 409);
-    }
-    if ($existing['jam_pulang']) {
-        json_error('Anda sudah melakukan absen pulang hari ini.', 409);
-    }
-
-    $now = date('H:i:s');
-    if (strtotime($now) < strtotime((string) $existing['jam_masuk'])) {
-        json_error('Jam pulang tidak boleh lebih awal dari jam masuk.', 422);
-    }
+    $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
+    $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu);
     $fotoName = save_photo($foto, 'pulang');
-    $stmt = db()->prepare('UPDATE absensi SET jam_pulang = ?, foto_pulang = ?, barcode_pulang = ?, diperbarui_pada = ? WHERE id = ?');
-    $stmt->execute([$now, $fotoName, trim((string) $barcode), date('Y-m-d H:i:s'), $existing['id']]);
-    write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_out', "pulang {$now}");
 
-    return ['jam_pulang' => $now, 'foto' => $fotoName];
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ? FOR UPDATE');
+        $stmt->execute([$user['id'], date('Y-m-d')]);
+        $existing = $stmt->fetch() ?: null;
+        if (!$existing || !$existing['jam_masuk']) {
+            $pdo->rollBack();
+            json_error('Anda belum melakukan absen masuk hari ini.', 409);
+        }
+        if ($existing['jam_pulang']) {
+            $pdo->rollBack();
+            json_error('Anda sudah melakukan absen pulang hari ini.', 409);
+        }
+
+        $now = date('H:i:s');
+        if (strtotime($now) < strtotime((string) $existing['jam_masuk'])) {
+            $pdo->rollBack();
+            json_error('Jam pulang tidak boleh lebih awal dari jam masuk.', 422);
+        }
+        $kegiatan = clean_text($kegiatan, 500);
+        $upd = $pdo->prepare('UPDATE absensi SET jam_pulang = ?, foto_pulang = ?, barcode_pulang = ?, lat_pulang = ?, lng_pulang = ?, akurasi_pulang = ?, jarak_pulang_m = ?, mode = ?, kegiatan = ?, diperbarui_pada = ? WHERE id = ?');
+        $upd->execute([$now, $fotoName, clean_text($barcode, 100), $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatan, date('Y-m-d H:i:s'), $existing['id']]);
+        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_out', "pulang {$now} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode}");
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+
+    return ['jam_pulang' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode];
 }
 
 function do_izin(array $user, string $jenis, string $mulai, string $sampai, string $catatan, ?string $foto, bool $autoApprove = false): array
@@ -127,6 +227,7 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
     if ((int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto bukti wajib dilampirkan untuk pengajuan izin/sakit.', 422);
     }
+    $catatan = clean_text($catatan, 500);
     $fotoName = save_photo($foto, $jenis);
 
     $ts = date('Y-m-d H:i:s');
@@ -158,7 +259,8 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
 
 function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $status, string $catatan, ?string $jamMasuk, ?string $jamPulang): array
 {
-    if (trim($catatan) === '') {
+    $catatan = clean_text($catatan, 500);
+    if ($catatan === '') {
         json_error('Alasan koreksi wajib diisi.', 422);
     }
     if (!in_array($status, status_options(), true)) {
