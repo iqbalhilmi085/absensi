@@ -1,0 +1,11 @@
+# Data runtime / sensitif — jangan di-commit
+/backend/data/*.sqlite
+/backend/data/*.sqlite3
+/backend/data/*.db
+/backend/data/foto/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log

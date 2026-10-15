@@ -1,0 +1,6 @@
+# Lindungi berkas sensitif backend
+<FilesMatch "\.(sqlite|sqlite3|db|ini|log)$">
+    Require all denied
+</FilesMatch>
+
+Options -Indexes

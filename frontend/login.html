@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk · Absensi Universal</title>
+<script>
+  document.documentElement.dataset.theme =
+    matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body class="auth-body">
+<main class="auth-wrap">
+  <div class="glass auth-card">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <div>
+        <h1>Absensi Universal</h1>
+        <p class="muted small">Masuk untuk melanjutkan</p>
+      </div>
+    </div>
+
+    <div id="alert" class="alert alert-error" role="alert" hidden></div>
+
+    <form id="login-form" class="form">
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" autocomplete="username" required placeholder="nama@perusahaan.com">
+      </label>
+      <label class="field">
+        <span>Kata sandi</span>
+        <input type="password" name="kata_sandi" autocomplete="current-password" required placeholder="••••••••">
+      </label>
+      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Masuk</button>
+    </form>
+
+    <p class="muted small">Akses terbatas untuk admin. Karyawan hanya melakukan absensi melalui mode kiosk.</p>
+  </div>
+</main>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script>
+  const form = document.getElementById('login-form');
+  const alertBox = document.getElementById('alert');
+  const btn = document.getElementById('login-btn');
+
+  function showError(msg) {
+    alertBox.textContent = msg;
+    alertBox.hidden = false;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    alertBox.hidden = true;
+    btn.disabled = true;
+    btn.textContent = 'Memproses…';
+    try {
+      await Api.post('auth.login', {
+        email: form.email.value,
+        kata_sandi: form.kata_sandi.value
+      });
+      location.href = 'index.html';
+    } catch (err) {
+      showError(err.message || 'Gagal masuk.');
+      btn.disabled = false;
+      btn.textContent = 'Masuk';
+    }
+  });
+</script>
+</body>
+</html>
