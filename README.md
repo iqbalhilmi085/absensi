@@ -16,15 +16,19 @@ pengajuan izin, rekap, analisis K-Means, dan ekspor PDF.
 
 ## Kebutuhan
 
-- PHP 8.3+ (ekstensi PDO MySQL)
-- MySQL 8.x (proyek dikonfigurasi di port **3307**)
+- PHP 8.3+ (ekstensi PDO SQLite — bawaan; PDO MySQL hanya perlu bila memakai MySQL)
 - Web server Apache (mis. Laragon) dengan `mod_rewrite`
+- MySQL 8.x (opsional — hanya bila `DB_DRIVER = 'mysql'`, proyek dikonfigurasi di port **3307**)
 
 ## Konfigurasi
 
-Sesuaikan koneksi database di `backend/app/config.php`:
+Driver database diatur di `backend/app/config.php` melalui `DB_DRIVER`:
+
+- `'sqlite'` (default saat ini) — data di `backend/data/absensi_dev.sqlite`, tanpa server DB eksternal.
+- `'mysql'` — koneksi ke MySQL Laragon; sesuaikan:
 
 ```php
+define('DB_DRIVER', 'mysql');
 define('DB_HOST', '127.0.0.1');
 define('DB_PORT', 3307);
 define('DB_NAME', 'absensi');
@@ -32,9 +36,9 @@ define('DB_USER', 'root');
 define('DB_PASS', '');
 ```
 
-Database dan tabel dibuat otomatis (`CREATE DATABASE/TABLE IF NOT EXISTS`) oleh
-`backend/app/db.php` saat aplikasi pertama kali diakses. Skema manual tersedia di
-`backend/migrasi/schema_mysql.sql`.
+Skema dibuat otomatis saat pertama kali diakses. Pada SQLite, satu baris
+organisasi default juga disisipkan otomatis agar aplikasi langsung bisa dipakai.
+Skema MySQL manual tersedia di `backend/migrasi/schema_mysql.sql`.
 
 ## Menjalankan
 
