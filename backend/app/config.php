@@ -10,7 +10,12 @@ define('FOTO_DIR', DATA_DIR . DIRECTORY_SEPARATOR . 'foto');
 // Cadangan lama (SQLite) — tidak dipakai lagi, disimpan sebagai arsip.
 define('DB_FILE', DATA_DIR . DIRECTORY_SEPARATOR . 'absensi.sqlite');
 
-// Database utama: MySQL Laragon port 3307.
+// Driver aktif: 'sqlite' (sementara) atau 'mysql'.
+// Ubah ke 'mysql' untuk kembali memakai MySQL Laragon port 3307.
+define('DB_DRIVER', 'sqlite');
+define('SQLITE_FILE', DATA_DIR . DIRECTORY_SEPARATOR . 'absensi_dev.sqlite');
+
+// Database utama (dipakai bila DB_DRIVER = 'mysql'): MySQL Laragon port 3307.
 define('DB_HOST', '127.0.0.1');
 define('DB_PORT', 3307);
 define('DB_NAME', 'absensi');

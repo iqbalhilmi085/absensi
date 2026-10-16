@@ -73,13 +73,14 @@ function is_api_request(): bool
  */
 function login_lock_remaining(string $email, string $ip): int
 {
+    $sejak = date('Y-m-d H:i:s', time() - (LOGIN_LOCK_MINUTES * 60));
     $stmt = db()->prepare(
         'SELECT MIN(dibuat_pada) AS pertama, COUNT(*) AS gagal
          FROM login_attempt
          WHERE email = ? AND ip = ? AND sukses = 0
-           AND dibuat_pada >= (NOW() - INTERVAL ? MINUTE)'
+           AND dibuat_pada >= ?'
     );
-    $stmt->execute([$email, $ip, LOGIN_LOCK_MINUTES]);
+    $stmt->execute([$email, $ip, $sejak]);
     $row = $stmt->fetch();
     if (!$row || (int) $row['gagal'] < LOGIN_MAX_FAILS) {
         return 0;
@@ -94,7 +95,8 @@ function record_login_attempt(string $email, string $ip, bool $sukses): void
     $stmt = $pdo->prepare('INSERT INTO login_attempt (email, ip, sukses, dibuat_pada) VALUES (?, ?, ?, ?)');
     $stmt->execute([$email, $ip, $sukses ? 1 : 0, date('Y-m-d H:i:s')]);
     // Bersihkan riwayat lama (> 1 hari) agar tabel tetap ringkas.
-    $pdo->exec('DELETE FROM login_attempt WHERE dibuat_pada < (NOW() - INTERVAL 1 DAY)');
+    $batas = date('Y-m-d H:i:s', time() - 86400);
+    $pdo->prepare('DELETE FROM login_attempt WHERE dibuat_pada < ?')->execute([$batas]);
 }
 
 function clear_login_attempts(string $email, string $ip): void

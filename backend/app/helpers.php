@@ -105,8 +105,9 @@ function rate_limit(string $kunci, int $maks, int $jendelaDetik = 60, string $pe
 {
     $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'cli');
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT COUNT(*) FROM rate_limit WHERE kunci = ? AND ip = ? AND dibuat_pada >= (NOW() - INTERVAL ? SECOND)');
-    $stmt->execute([$kunci, $ip, $jendelaDetik]);
+    $sejak = date('Y-m-d H:i:s', time() - $jendelaDetik);
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM rate_limit WHERE kunci = ? AND ip = ? AND dibuat_pada >= ?');
+    $stmt->execute([$kunci, $ip, $sejak]);
     if ((int) $stmt->fetchColumn() >= $maks) {
         json_error($pesan !== '' ? $pesan : 'Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.', 429);
     }
@@ -114,7 +115,8 @@ function rate_limit(string $kunci, int $maks, int $jendelaDetik = 60, string $pe
     $userId = isset($_SESSION['pengguna_id']) ? (int) $_SESSION['pengguna_id'] : null;
     $ins->execute([$kunci, $ip, $userId, date('Y-m-d H:i:s')]);
     if (random_int(1, 25) === 1) {
-        $pdo->exec('DELETE FROM rate_limit WHERE dibuat_pada < (NOW() - INTERVAL 1 HOUR)');
+        $batas = date('Y-m-d H:i:s', time() - 3600);
+        $pdo->prepare('DELETE FROM rate_limit WHERE dibuat_pada < ?')->execute([$batas]);
     }
 }
 

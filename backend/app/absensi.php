@@ -127,7 +127,9 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
     $pdo->beginTransaction();
     try {
         // Kunci baris untuk mencegah absen ganda pada tanggal yang sama (race condition).
-        $stmt = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ? FOR UPDATE');
+        // SQLite tidak mendukung FOR UPDATE; penguncian database per transaksi tulis sudah cukup.
+        $lock = DB_DRIVER === 'sqlite' ? '' : ' FOR UPDATE';
+        $stmt = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ?' . $lock);
         $stmt->execute([$user['id'], date('Y-m-d')]);
         $existing = $stmt->fetch() ?: null;
         if ($existing && $existing['jam_masuk']) {
@@ -175,7 +177,8 @@ function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, 
     $pdo = db();
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ? FOR UPDATE');
+        $lock = DB_DRIVER === 'sqlite' ? '' : ' FOR UPDATE';
+        $stmt = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ?' . $lock);
         $stmt->execute([$user['id'], date('Y-m-d')]);
         $existing = $stmt->fetch() ?: null;
         if (!$existing || !$existing['jam_masuk']) {
