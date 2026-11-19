@@ -113,16 +113,40 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Absen pulang berhasil']);
 
         case 'absensi.izin':
-            $user = require_role(['karyawan']);
+            $actor = require_role(['karyawan', 'admin', 'atasan']);
+            $targetUser = $actor;
+            $targetId = (int) param('pengguna_id', 0);
+            if (in_array($actor['peran'], ['admin', 'atasan'], true) && $targetId > 0) {
+                $st = db()->prepare('SELECT * FROM pengguna WHERE id = ? AND organisasi_id = ?');
+                $st->execute([$targetId, $actor['organisasi_id']]);
+                $found = $st->fetch();
+                if (!$found) {
+                    json_error('Karyawan tidak ditemukan.', 404);
+                }
+                $targetUser = $found;
+            }
             $res = do_izin(
-                $user,
+                $targetUser,
                 (string) param('jenis', 'izin'),
                 (string) param('mulai', ''),
                 (string) param('sampai', ''),
                 (string) param('catatan', ''),
-                param('foto')
+                param('foto'),
+                in_array($actor['peran'], ['admin', 'atasan'], true)
             );
-            json_response(['ok' => true, 'data' => $res, 'pesan' => 'Pengajuan terkirim']);
+            json_response(['ok' => true, 'data' => $res, 'pesan' => 'Catatan izin/sakit berhasil disimpan']);
+
+        case 'absensi.izin_list':
+            $user = require_role(['admin', 'atasan', 'karyawan']);
+            json_response(['ok' => true, 'data' => daftar_izin((int) $user['organisasi_id'])]);
+
+        case 'kiosk.info':
+            json_response(['ok' => true, 'data' => kiosk_info()]);
+
+        case 'kiosk.absen':
+            rate_limit('absensi', RATE_LIMIT_ABSEN, 60, 'Terlalu banyak percobaan absen. Tunggu sebentar lalu coba lagi.');
+            $res = kiosk_absen();
+            json_response(['ok' => true, 'data' => $res, 'pesan' => $res['pesan']]);
 
         case 'absensi.koreksi':
             $user = require_role(['admin']);
@@ -180,9 +204,14 @@ function route(string $action, string $method): void
 
         case 'klaster.list':
             $user = require_role(['admin']);
-            $stmt = db()->prepare('SELECT id, periode, k, dibuat_pada FROM hasil_klaster WHERE organisasi_id = ? ORDER BY id DESC LIMIT 20');
+            $stmt = db()->prepare('SELECT id, periode, k, hasil, dibuat_pada FROM hasil_klaster WHERE organisasi_id = ? ORDER BY id DESC LIMIT 20');
             $stmt->execute([$user['organisasi_id']]);
-            json_response(['ok' => true, 'data' => $stmt->fetchAll()]);
+            $rows = $stmt->fetchAll();
+            foreach ($rows as &$r) {
+                $r['hasil'] = json_decode((string) ($r['hasil'] ?? '[]'), true) ?: [];
+            }
+            unset($r);
+            json_response(['ok' => true, 'data' => $rows]);
 
         case 'axel.dataset':
             $user = require_role(['admin']);
@@ -376,13 +405,113 @@ function own_today(array $user): array
 
 function daftar_harian(int $orgId, string $tanggal): array
 {
-    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.catatan, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
+    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.catatan, a.kegiatan, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
         FROM pengguna u
         LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ?
         WHERE u.organisasi_id = ? AND u.peran = 'karyawan' AND u.aktif = 1
         ORDER BY u.nama");
     $stmt->execute([$tanggal, $orgId]);
     return $stmt->fetchAll();
+}
+
+function daftar_izin(int $orgId): array
+{
+    $stmt = db()->prepare("SELECT a.id, a.pengguna_id, a.tanggal, a.status, a.catatan, a.foto_masuk, a.dibuat_pada, u.nama, u.tim, u.jabatan
+        FROM absensi a
+        JOIN pengguna u ON u.id = a.pengguna_id
+        WHERE u.organisasi_id = ? AND a.status IN ('izin', 'sakit')
+        ORDER BY a.tanggal DESC, u.nama ASC
+        LIMIT 200");
+    $stmt->execute([$orgId]);
+    return $stmt->fetchAll();
+}
+
+function kiosk_info(): array
+{
+    $org = db()->query('SELECT * FROM organisasi ORDER BY id LIMIT 1')->fetch() ?: [];
+    $orgId = (int) ($org['id'] ?? 1);
+    $today = date('Y-m-d');
+    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.status, a.jam_masuk, a.jam_pulang, a.catatan
+        FROM pengguna u
+        LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ?
+        WHERE u.organisasi_id = ? AND u.peran = 'karyawan' AND u.aktif = 1
+        ORDER BY u.nama");
+    $stmt->execute([$today, $orgId]);
+    return [
+        'organisasi' => [
+            'id' => $orgId,
+            'nama' => $org['nama'] ?? APP_NAME,
+            'kode_lokasi' => $org['kode_lokasi'] ?? '',
+            'jam_masuk' => $org['jam_masuk'] ?? '06:00',
+            'jam_pulang' => $org['jam_pulang'] ?? '14:00',
+            'toleransi_menit' => (int) ($org['toleransi_menit'] ?? 15),
+            'wajib_foto' => (bool) ($org['wajib_foto'] ?? 0),
+            'wajib_barcode' => (bool) ($org['wajib_barcode'] ?? 0),
+            'wajib_gps' => (int) ($org['wajib_gps'] ?? 0) === 1,
+            'radius_masuk_m' => (int) ($org['radius_masuk_m'] ?? 0),
+            'lat_kantor' => isset($org['lat_kantor']) && $org['lat_kantor'] !== null ? (float) $org['lat_kantor'] : null,
+            'lng_kantor' => isset($org['lng_kantor']) && $org['lng_kantor'] !== null ? (float) $org['lng_kantor'] : null,
+        ],
+        'tanggal' => $today,
+        'jam_sekarang' => date('H:i:s'),
+        'karyawan' => $stmt->fetchAll(),
+    ];
+}
+
+function kiosk_absen(): array
+{
+    $penggunaId = (int) param('pengguna_id', 0);
+    $tipe = strtolower(trim((string) param('tipe', 'masuk')));
+    $shift = clean_text(param('shift', 'Pagi (06:00-14:00)'), 100);
+    $barcode = (string) param('barcode', '');
+    $foto = param('foto');
+
+    $stmt = db()->prepare("SELECT * FROM pengguna WHERE id = ? AND peran = 'karyawan' AND aktif = 1");
+    $stmt->execute([$penggunaId]);
+    $user = $stmt->fetch();
+    if (!$user) {
+        json_error('Pilih nama karyawan yang valid.', 422);
+    }
+
+    if ($tipe === 'pulang') {
+        $res = do_checkout(
+            $user,
+            $barcode,
+            $foto,
+            param('lat'),
+            param('lng'),
+            param('akurasi'),
+            'wfo',
+            (bool) param('palsu', false),
+            param('kegiatan') ? (string) param('kegiatan') : null
+        );
+        $res['pesan'] = "Presensi pulang {$user['nama']} berhasil dicatat ({$res['jam_pulang']})";
+        return $res;
+    }
+
+    $res = do_checkin(
+        $user,
+        $barcode,
+        $foto,
+        param('lat'),
+        param('lng'),
+        param('akurasi'),
+        'wfo',
+        (bool) param('palsu', false)
+    );
+    if ($shift !== '') {
+        $today = date('Y-m-d');
+        $org = get_org((int) $user['organisasi_id']);
+        $toleransi = (int) ($org['toleransi_menit'] ?? 15);
+        $rowCheck = ['tanggal' => $today, 'jam_masuk' => $res['jam_masuk'], 'catatan' => "Shift: {$shift}"];
+        $lateMin = hitung_terlambat_row($rowCheck, $org['jam_masuk'] ?? '06:00', $toleransi) ?? 0;
+        $statusShift = $lateMin > 0 ? 'terlambat' : 'hadir';
+        $upd = db()->prepare('UPDATE absensi SET catatan = ?, status = ? WHERE pengguna_id = ? AND tanggal = ?');
+        $upd->execute(["Shift: {$shift}", $statusShift, $user['id'], $today]);
+        $res['status'] = $statusShift;
+    }
+    $res['pesan'] = "Presensi masuk {$user['nama']} berhasil dicatat ({$res['jam_masuk']})";
+    return $res;
 }
 
 function axel_dataset(array $user): array
@@ -401,8 +530,8 @@ function axel_dataset(array $user): array
         json_error('Tanggal selesai tidak boleh sebelum tanggal mulai.', 422);
     }
 
-    $sql = "SELECT a.tanggal, u.nama, u.tim, u.jabatan, a.status, a.jam_masuk, a.jam_pulang,
-                   a.foto_masuk, a.foto_pulang, a.barcode_masuk, a.catatan,
+    $sql = "SELECT a.id, a.pengguna_id, a.tanggal, u.nama, u.tim, u.jabatan, a.status, a.jam_masuk, a.jam_pulang,
+                   a.foto_masuk, a.foto_pulang, a.barcode_masuk, a.catatan, a.kegiatan,
                    k.nama AS dikoreksi_nama
             FROM absensi a
             JOIN pengguna u ON u.id = a.pengguna_id
@@ -436,19 +565,12 @@ function axel_dataset(array $user): array
 
     $out = [];
     foreach ($rows as $r) {
-        $menitTerlambat = null;
-        $durasi = null;
-        if ($r['jam_masuk']) {
-            $late = (int) round((strtotime($r['tanggal'] . ' ' . $r['jam_masuk']) - strtotime($r['tanggal'] . ' ' . $jamMasukJadwal)) / 60);
-            $menitTerlambat = max(0, $late - $toleransi);
-            if ($menitTerlambat !== null) {
-                $lateSum += $menitTerlambat;
-                $lateCount++;
-            }
+        $menitTerlambat = hitung_terlambat_row($r, $jamMasukJadwal, $toleransi);
+        if ($menitTerlambat !== null) {
+            $lateSum += $menitTerlambat;
+            $lateCount++;
         }
-        if ($r['jam_masuk'] && $r['jam_pulang']) {
-            $durasi = (int) round((strtotime($r['jam_pulang']) - strtotime($r['jam_masuk'])) / 60);
-        }
+        $durasi = hitung_durasi_row($r['jam_masuk'] ?? null, $r['jam_pulang'] ?? null);
         $summary[$r['status']] = ($summary[$r['status']] ?? 0) + 1;
         $summary['total']++;
         $out[] = array_merge($r, [

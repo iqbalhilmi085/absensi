@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Absensi Universal</title>
+<title>Aplikasi Absensi Karyawan</title>
 <script>
   document.documentElement.dataset.theme =
-    matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    localStorage.getItem('absensi-theme') || 'light';
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,30 +16,45 @@
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-dot" style="width:38px;height:38px;border-radius:12px"></span>
+      <span class="brand-dot" style="width:38px;height:38px;border-radius:10px">AU</span>
       <div>
-        <h1>Absensi Universal</h1>
-        <p class="muted small" id="side-org">—</p>
+        <h1>Aplikasi Absensi</h1>
+        <p class="muted small" id="side-org">Memuat…</p>
       </div>
     </div>
+    <div class="nav-section-label">Menu</div>
     <nav class="nav" id="nav-desktop"></nav>
     <div class="sidebar-foot">
-      <button class="btn btn-secondary btn-sm" id="theme-toggle" style="width:100%">Ubah tema</button>
-      <div class="user-chip glass" style="padding:10px 12px">
-        <span class="avatar" id="user-avatar">?</span>
+      <div class="user-chip">
+        <span class="avatar" id="user-avatar">A</span>
         <div style="min-width:0">
           <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="user-name">—</div>
           <div class="muted small" id="user-role">—</div>
         </div>
       </div>
-      <button class="btn btn-ghost btn-sm" id="logout-btn" style="width:100%">Keluar</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn btn-secondary btn-sm" id="theme-toggle">Warna Layar</button>
+        <button class="btn btn-ghost btn-sm" id="logout-btn">Keluar</button>
+      </div>
     </div>
   </aside>
 
-  <main class="main" id="view" aria-live="polite"></main>
+  <div class="main-wrap">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-org" id="top-org">Aplikasi Absensi Karyawan</span>
+        <span class="topbar-divider"></span>
+        <span class="topbar-date tabular" id="top-clock">—</span>
+      </div>
+      <div class="topbar-right">
+        <span class="badge badge-hadir">Aktif</span>
+      </div>
+    </header>
+    <main class="main" id="view" aria-live="polite"></main>
+  </div>
 </div>
 
-<nav class="tabbar" id="nav-mobile" aria-label="Navigasi utama"></nav>
+<nav class="tabbar" id="nav-mobile" aria-label="Menu utama"></nav>
 <div class="toast-wrap" id="toasts" aria-live="assertive"></div>
 <div id="modal-root"></div>
 

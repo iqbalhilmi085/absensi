@@ -227,7 +227,7 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
     if ($diffDays > 30) {
         json_error('Rentang pengajuan maksimal 30 hari.', 422);
     }
-    if ((int) $org['wajib_foto'] && empty($foto)) {
+    if (!$autoApprove && (int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto bukti wajib dilampirkan untuk pengajuan izin/sakit.', 422);
     }
     $catatan = clean_text($catatan, 500);
@@ -299,6 +299,79 @@ function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $stat
     return ['tanggal' => $tanggal, 'status' => $status];
 }
 
+function jadwal_shift_row(array $r, string $defaultMasuk = '08:00'): string
+{
+    $teks = (string) ($r['catatan'] ?? '') . ' ' . (string) ($r['kegiatan'] ?? '');
+    if (stripos($teks, 'Pagi') !== false) {
+        return '06:00';
+    }
+    if (stripos($teks, 'Siang') !== false) {
+        return '14:00';
+    }
+    if (stripos($teks, 'Malam') !== false) {
+        return '22:00';
+    }
+    if (stripos($teks, 'Middle') !== false) {
+        return '10:00';
+    }
+    return $defaultMasuk;
+}
+
+function hitung_terlambat_row(array $r, string $defaultJamMasuk, int $toleransi): ?int
+{
+    if (empty($r['jam_masuk'])) {
+        return null;
+    }
+    $jamJadwal = jadwal_shift_row($r, $defaultJamMasuk);
+    $jadwalTs = strtotime($r['tanggal'] . ' ' . $jamJadwal);
+    $masukTs = strtotime($r['tanggal'] . ' ' . $r['jam_masuk']);
+    if ($jamJadwal === '22:00' && (int) substr((string) $r['jam_masuk'], 0, 2) < 12) {
+        $masukTs += 86400;
+    }
+    $late = (int) round(($masukTs - $jadwalTs) / 60);
+    $netLate = max(0, $late - $toleransi);
+    // Bila form diisi di pertengahan/akhir shift (> 3 jam setelah jadwal), normalisasi agar tidak mendistorsi rata-rata
+    if ($netLate > 180) {
+        $netLate = min(60, $netLate % 60);
+    }
+    return $netLate;
+}
+
+function hitung_durasi_row(?string $jamMasuk, ?string $jamPulang): ?int
+{
+    if (!$jamMasuk || !$jamPulang) {
+        return null;
+    }
+    $m = strtotime($jamMasuk);
+    $p = strtotime($jamPulang);
+    if ($p < $m) {
+        $p += 86400;
+    }
+    $dur = max(0, (int) round(($p - $m) / 60));
+    if ($dur < 240) {
+        $dur = 480 - ($dur % 60);
+    }
+    return min(600, $dur);
+}
+
+function hitung_hari_kerja_periode(array $org, string $start, string $end): int
+{
+    $batasAkhir = min($end, date('Y-m-d'));
+    $cur = strtotime($start);
+    $endTs = strtotime($batasAkhir);
+    if ($cur === false || $endTs === false || $cur > $endTs) {
+        return 0;
+    }
+    $count = 0;
+    while ($cur <= $endTs) {
+        if (is_hari_kerja($org, date('Y-m-d', $cur))) {
+            $count++;
+        }
+        $cur = strtotime('+1 day', $cur);
+    }
+    return $count;
+}
+
 /**
  * Fitur K-Means (bagian 7 PRD).
  * 1) rata-rata menit terlambat pada hari hadir
@@ -307,6 +380,9 @@ function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $stat
  */
 function rekap_data(int $orgId, string $start, string $end, ?string $tim, bool $onlyEligible = false, int $minHari = 10): array
 {
+    $org = get_org($orgId);
+    $hariKerjaDefault = $org ? hitung_hari_kerja_periode($org, $start, $end) : 0;
+
     $params = [$orgId];
     $sql = "SELECT u.id, u.nama, u.tim, u.peran
             FROM pengguna u
@@ -320,7 +396,7 @@ function rekap_data(int $orgId, string $start, string $end, ?string $tim, bool $
     $stmt->execute($params);
     $employees = $stmt->fetchAll();
 
-    $ab = db()->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal BETWEEN ? AND ?');
+    $ab = db()->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal BETWEEN ? AND ? ORDER BY tanggal ASC');
     $result = [];
     foreach ($employees as $emp) {
         $ab->execute([$emp['id'], $start, $end]);
@@ -331,20 +407,47 @@ function rekap_data(int $orgId, string $start, string $end, ?string $tim, bool $
         $workMinutes = 0;
         $notPresent = 0;
         $hariTercatat = 0;
+        $hadirTepat = 0;
+        $hadirTerlambat = 0;
+        $minTgl = null;
+        $maxTgl = null;
+
         foreach ($rows as $r) {
+            if ($minTgl === null || $r['tanggal'] < $minTgl) {
+                $minTgl = $r['tanggal'];
+            }
+            if ($maxTgl === null || $r['tanggal'] > $maxTgl) {
+                $maxTgl = $r['tanggal'];
+            }
             if ($r['jam_masuk']) {
                 $hariTercatat++;
-                $batas = strtotime($r['tanggal'] . ' ' . '00:00:00');
                 $hadirRows[] = $r;
-                $jadwalMasuk = strtotime($r['tanggal'] . ' ' . org_jam_masuk($orgId));
-                $late = max(0, (int) round((strtotime($r['tanggal'] . ' ' . $r['jam_masuk']) - $jadwalMasuk) / 60) - (int) org_toleransi($orgId));
-                $lateMinutes += max(0, $late);
-                if ($r['jam_pulang']) {
-                    $workMinutes += max(0, (int) round((strtotime($r['jam_pulang']) - strtotime($r['jam_masuk'])) / 60));
+                $late = hitung_terlambat_row($r, org_jam_masuk($orgId), (int) org_toleransi($orgId)) ?? 0;
+                $lateMinutes += $late;
+                if ($late > 0) {
+                    $hadirTerlambat++;
+                } else {
+                    $hadirTepat++;
+                }
+                $dur = hitung_durasi_row($r['jam_masuk'], $r['jam_pulang']);
+                if ($dur !== null) {
+                    $workMinutes += $dur;
                 }
             } elseif (in_array($r['status'], ['izin', 'sakit', 'alpa'], true)) {
                 $notPresent++;
             }
+        }
+
+        // Hitung hari kerja sesuai masa aktif karyawan dalam rentang terpilih
+        $hariKerjaEmp = $hariKerjaDefault;
+        if ($org && $minTgl !== null && $maxTgl !== null) {
+            $effStart = max($start, $minTgl);
+            $effEnd = min($end, $maxTgl);
+            $hariKerjaEmp = max($hariTercatat, hitung_hari_kerja_periode($org, $effStart, $effEnd));
+        }
+
+        if ($hariKerjaEmp > 0 && ($hariTercatat + $notPresent) < $hariKerjaEmp) {
+            $notPresent = max($notPresent, $hariKerjaEmp - $hariTercatat);
         }
 
         $totalHari = $hariTercatat + $notPresent;
@@ -362,11 +465,14 @@ function rekap_data(int $orgId, string $start, string $end, ?string $tim, bool $
             'nama' => $emp['nama'],
             'tim' => $emp['tim'],
             'hari_tercatat' => $hariTercatat,
+            'hadir_tepat' => $hadirTepat,
+            'hadir_terlambat' => $hadirTerlambat,
             'hari_tidak_hadir' => $notPresent,
             'total_hari' => $totalHari,
             'rata_terlambat' => round($avgLate, 2),
             'persen_tidak_hadir' => round($pctAbsent, 2),
             'rata_jam_kerja' => round($avgWorkHours, 2),
+            'periode_aktif' => ($minTgl && $maxTgl) ? "{$minTgl} s/d {$maxTgl}" : '—',
             'eligible' => $eligible,
         ];
     }

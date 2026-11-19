@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Masuk · Absensi Universal</title>
+<title>Masuk · Aplikasi Absensi Karyawan</title>
 <script>
   document.documentElement.dataset.theme =
-    matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    localStorage.getItem('absensi-theme') || 'light';
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,48 +16,69 @@
 <main class="auth-wrap">
   <div class="glass auth-card">
     <div class="brand">
-      <span class="brand-dot"></span>
+      <span class="brand-dot">AU</span>
       <div>
-        <h1>Absensi Universal</h1>
-        <p class="muted small">Masuk untuk melanjutkan</p>
+        <h1>Aplikasi Absensi</h1>
+        <p class="muted small">Kelola kehadiran karyawan dengan mudah</p>
       </div>
     </div>
 
     <div id="alert" class="alert alert-error" role="alert" hidden></div>
+    <div id="alert-ok" class="alert alert-ok" role="status" hidden></div>
 
     <form id="login-form" class="form">
       <label class="field">
-        <span>Email</span>
-        <input type="email" name="email" autocomplete="username" required placeholder="nama@perusahaan.com">
+        <span>Email Admin</span>
+        <input type="email" name="email" autocomplete="username" required placeholder="Contoh: admin@demo.test">
       </label>
       <label class="field">
-        <span>Kata sandi</span>
-        <input type="password" name="kata_sandi" autocomplete="current-password" required placeholder="••••••••">
+        <span>Kata Sandi</span>
+        <input type="password" name="kata_sandi" autocomplete="current-password" required placeholder="Masukkan kata sandi">
       </label>
-      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Masuk</button>
+      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Masuk sebagai Admin</button>
     </form>
 
-    <p class="muted small">Akses terbatas untuk admin. Karyawan hanya melakukan absensi melalui mode kiosk.</p>
+    <div class="auth-divider">atau</div>
+
+    <button type="button" class="btn btn-secondary btn-block" id="kiosk-open-btn">
+      Absen Karyawan (Tanpa Login)
+    </button>
+
+    <p class="muted small" style="text-align:center">
+      Karyawan dapat langsung klik tombol di atas untuk absen masuk atau pulang.
+    </p>
   </div>
 </main>
 
+<div id="modal-root"></div>
+
+<script src="assets/vendor/jsQR.js"></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
+<script src="assets/js/scanner.js"></script>
 <script>
   const form = document.getElementById('login-form');
   const alertBox = document.getElementById('alert');
+  const alertOk = document.getElementById('alert-ok');
   const btn = document.getElementById('login-btn');
 
   function showError(msg) {
+    alertOk.hidden = true;
     alertBox.textContent = msg;
     alertBox.hidden = false;
+  }
+
+  function showOk(msg) {
+    alertBox.hidden = true;
+    alertOk.textContent = msg;
+    alertOk.hidden = false;
   }
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     alertBox.hidden = true;
     btn.disabled = true;
-    btn.textContent = 'Memproses…';
+    btn.textContent = 'Sedang masuk…';
     try {
       await Api.post('auth.login', {
         email: form.email.value,
@@ -65,9 +86,105 @@
       });
       location.href = 'index.html';
     } catch (err) {
-      showError(err.message || 'Gagal masuk.');
+      showError(err.message || 'Gagal masuk. Periksa kembali email dan kata sandi.');
       btn.disabled = false;
-      btn.textContent = 'Masuk';
+      btn.textContent = 'Masuk sebagai Admin';
+    }
+  });
+
+  document.getElementById('kiosk-open-btn').addEventListener('click', async () => {
+    try {
+      const { data } = await Api.get('kiosk.info');
+      const root = document.getElementById('modal-root');
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay';
+      const empOpts = data.karyawan.map((k) => {
+        const st = k.jam_masuk ? (k.jam_pulang ? ' (Sudah Pulang)' : ` (Sudah Masuk ${k.jam_masuk.slice(0,5)})`) : '';
+        return `<option value="${k.id}">${k.nama} — ${k.tim}${st}</option>`;
+      }).join('');
+
+      overlay.innerHTML = `
+        <div class="glass modal">
+          <div class="modal-head">
+            <h2>Form Absen Karyawan · ${data.organisasi.nama}</h2>
+            <button class="icon-btn" type="button" data-close>×</button>
+          </div>
+          <div class="form">
+            <label class="field">
+              <span>Pilih Nama Anda</span>
+              <select id="kiosk-emp">${empOpts}</select>
+            </label>
+            <div class="field-row">
+              <label class="field">
+                <span>Mau Absen Apa?</span>
+                <select id="kiosk-tipe">
+                  <option value="masuk">Absen Masuk</option>
+                  <option value="pulang">Absen Pulang</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Pilih Shift Kerja</span>
+                <select id="kiosk-shift">
+                  <option value="Pagi (06:00-14:00)">Shift Pagi (06:00 - 14:00)</option>
+                  <option value="Middle">Shift Middle (10:00 - 18:00)</option>
+                  <option value="Siang (14:00 - 22:00)">Shift Siang (14:00 - 22:00)</option>
+                  <option value="Malam (22:00 - 06:00)">Shift Malam (22:00 - 06:00)</option>
+                </select>
+              </label>
+            </div>
+            <div id="kiosk-err" class="alert alert-error" hidden></div>
+            <button type="button" class="btn btn-primary btn-block" id="kiosk-next">
+              Lanjut Ambil Foto &amp; Absen
+            </button>
+          </div>
+        </div>`;
+      root.append(overlay);
+      const close = () => overlay.remove();
+      overlay.querySelector('[data-close]').addEventListener('click', close);
+
+      overlay.querySelector('#kiosk-next').addEventListener('click', async () => {
+        const penggunaId = Number(overlay.querySelector('#kiosk-emp').value);
+        const tipe = overlay.querySelector('#kiosk-tipe').value;
+        const shift = overlay.querySelector('#kiosk-shift').value;
+        const errEl = overlay.querySelector('#kiosk-err');
+        errEl.hidden = true;
+        try {
+          const org = data.organisasi;
+          const shot = await Scanner.open({
+            wajibBarcode: org.wajib_barcode,
+            wajibFoto: org.wajib_foto,
+            wajibGps: org.wajib_gps,
+            radius: org.radius_masuk_m,
+            latKantor: org.lat_kantor,
+            lngKantor: org.lng_kantor,
+            kodeLokasi: org.kode_lokasi,
+            title: tipe === 'masuk' ? 'Absen Masuk' : 'Absen Pulang'
+          });
+          const payload = {
+            pengguna_id: penggunaId,
+            tipe,
+            shift,
+            barcode: shot.barcode,
+            foto: shot.foto,
+            palsu: !!shot.palsu
+          };
+          if (shot.gps) {
+            payload.lat = shot.gps.lat;
+            payload.lng = shot.gps.lng;
+            payload.akurasi = shot.gps.akurasi;
+          }
+          const res = await Api.post('kiosk.absen', payload);
+          close();
+          showOk(res.pesan || 'Absen berhasil disimpan.');
+        } catch (err) {
+          if (err.message !== 'dibatalkan') {
+            errEl.textContent = err.message;
+            errEl.hidden = false;
+          }
+        }
+      });
+    } catch (err) {
+      showError(err.message || 'Gagal membuka form absen.');
     }
   });
 </script>

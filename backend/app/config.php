@@ -13,7 +13,9 @@ define('DB_FILE', DATA_DIR . DIRECTORY_SEPARATOR . 'absensi.sqlite');
 // Driver aktif: 'sqlite' (sementara) atau 'mysql'.
 // Ubah ke 'mysql' untuk kembali memakai MySQL Laragon port 3307.
 define('DB_DRIVER', 'sqlite');
-define('SQLITE_FILE', DATA_DIR . DIRECTORY_SEPARATOR . 'absensi_dev.sqlite');
+if (!defined('SQLITE_FILE')) {
+    define('SQLITE_FILE', DATA_DIR . DIRECTORY_SEPARATOR . 'absensi_dev.sqlite');
+}
 
 // Database utama (dipakai bila DB_DRIVER = 'mysql'): MySQL Laragon port 3307.
 define('DB_HOST', '127.0.0.1');
