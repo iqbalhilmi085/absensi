@@ -51,6 +51,15 @@
     return `<span class="badge badge-${s}">${STATUS_LABEL[s] || s}</span>`;
   }
 
+  function empCell(nama) {
+    const clean = String(nama || '').trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    const initials = parts.length >= 2
+      ? (parts[0][0] + parts[1][0]).toUpperCase()
+      : (clean.slice(0, 2) || '?').toUpperCase();
+    return `<span class="emp-cell"><span class="emp-initial">${esc(initials)}</span><span style="font-weight:600">${esc(clean)}</span></span>`;
+  }
+
   function parseCatatanBukti(row) {
     const rawCatatan = String(row.catatan || '').trim();
     const rawKegiatan = String(row.kegiatan || '').trim();
@@ -311,20 +320,31 @@
   async function viewDasbor(view) {
     const { data } = await Api.get('dashboard');
     const h = data.hari_ini;
+    const totalKaryawan = Number(h.total_karyawan || 0);
     const totalHadirHariIni = Number(h.hadir || 0) + Number(h.terlambat || 0);
-    const pctHadir = h.total_karyawan > 0 ? Math.round((totalHadirHariIni / h.total_karyawan) * 100) : 0;
+    const pctHadir = totalKaryawan > 0 ? Math.round((totalHadirHariIni / totalKaryawan) * 100) : 0;
 
-    const maxTren = Math.max(1, ...data.tren.map((t) => Number(t.hadir)));
-    const bars = data.tren.length
-      ? data.tren.map((t) => {
-          const pct = Math.max(4, Math.round((Number(t.hadir) / maxTren) * 100));
-          const tglSingkat = t.tanggal.slice(8, 10) + '/' + t.tanggal.slice(5, 7);
-          return `<div class="bar-col" title="${fmtTanggal(t.tanggal)}: ${t.hadir} orang masuk (${t.terlambat || 0} terlambat)">
-            <div class="bar" style="height:${pct}%"></div>
-            <span class="bar-lbl">${tglSingkat}</span>
-          </div>`;
-        }).join('')
-      : '<p class="muted small" style="margin:auto">Belum ada data 30 hari terakhir.</p>';
+    // Pastikan seluruh 30 hari kalender terakhir ada di daftar (termasuk bila ada hari dengan 0 kehadiran)
+    const mapTren = {};
+    (data.tren || []).forEach((t) => { mapTren[t.tanggal] = t; });
+    const full30Days = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const iso = todayISO(d);
+      const row = mapTren[iso] || { tanggal: iso, hadir: 0, terlambat: 0, izin_sakit: 0, alpa: 0 };
+      const totalMasuk = Number(row.hadir || 0);
+      const jmlTerlambat = Number(row.terlambat || 0);
+      const jmlTepat = Math.max(0, totalMasuk - jmlTerlambat);
+      full30Days.push({
+        tanggal: iso,
+        hadir: totalMasuk,
+        tepat: jmlTepat,
+        terlambat: jmlTerlambat,
+        izin_sakit: Number(row.izin_sakit || 0),
+        alpa: Number(row.alpa || 0)
+      });
+    }
 
     view.innerHTML = `
       ${pageHead('Beranda', `Ringkasan kehadiran karyawan ${esc(state.org.nama)} hari ini (${fmtTanggal(todayISO())})`, `
@@ -335,7 +355,7 @@
         <div class="grid grid-4">
           <div class="glass card metric accent-hadir">
             <div class="label">Sudah Masuk Hari Ini</div>
-            <div class="value">${totalHadirHariIni} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">dari ${h.total_karyawan} orang</span></div>
+            <div class="value">${totalHadirHariIni} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">dari ${totalKaryawan} orang</span></div>
             <div class="sublabel">${pctHadir}% karyawan sudah absen</div>
           </div>
           <div class="glass card metric accent-terlambat">
@@ -355,39 +375,167 @@
           </div>
         </div>
 
-        <div class="grid grid-2">
-          <div class="glass card">
-            <div class="card-head">
-              <h2>Grafik Kehadiran 30 Hari Terakhir</h2>
-              <span class="pill-note">Total Karyawan: ${h.total_karyawan} orang</span>
+        <div class="glass card">
+          <div class="card-head" style="flex-wrap:wrap">
+            <div>
+              <h2 id="trend-title">Grafik Kehadiran 30 Hari Terakhir</h2>
+              <p class="muted small">Klik salah satu batang tanggal untuk melihat rincian jumlah yang tepat waktu, terlambat, dan daftar namanya</p>
             </div>
-            <div class="bars">${bars}</div>
-            <div class="bar-legend">
-              <span><i class="legend-dot" style="background:var(--accent)"></i>Tinggi batang menunjukkan jumlah karyawan yang masuk pada tanggal tersebut</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn btn-secondary btn-sm" data-range="7">7 Hari</button>
+              <button class="btn btn-secondary btn-sm" data-range="14">14 Hari</button>
+              <button class="btn btn-primary btn-sm" data-range="30">30 Hari</button>
             </div>
           </div>
 
-          <div class="glass card">
-            <div class="card-head">
-              <h2>Karyawan Terlambat / Tidak Masuk Hari Ini</h2>
-              <span class="pill-note">${data.perlu_dicek.length} orang</span>
-            </div>
-            <div class="riwayat">
-              ${data.perlu_dicek.length ? data.perlu_dicek.map((r) => {
-                const { shiftLabel } = parseCatatanBukti(r);
-                return `
-                <div class="riwayat-row">
-                  <div>
-                    <div class="t">${esc(r.nama)}</div>
-                    <div class="s">${r.jam_masuk ? 'Masuk jam ' + fmtJam(r.jam_masuk) : 'Belum ada jam masuk'} ${shiftLabel ? '· ' + esc(shiftLabel) : ''}</div>
-                  </div>
-                  ${badge(r.status)}
-                </div>`;
-              }).join('') : '<p class="muted small">Tidak ada yang terlambat hari ini. Semua karyawan hadir tepat waktu.</p>'}
-            </div>
+          <div class="trend-summary-strip" id="trend-summary"></div>
+
+          <div class="trend-chart-wrap">
+            <div class="trend-yaxis" id="trend-yaxis"></div>
+            <div class="bars" id="trend-bars"></div>
+          </div>
+
+          <div class="bar-legend">
+            <span><i class="legend-dot" style="background:#16a34a"></i>Hijau = Hadir Tepat Waktu</span>
+            <span><i class="legend-dot" style="background:#f59e0b"></i>Kuning = Datang Terlambat</span>
+            <span class="muted small" style="margin-left:auto">Angka di atas batang = Total karyawan yang masuk pada tanggal tersebut</span>
+          </div>
+
+          <div class="trend-detail-bar" id="trend-detail"></div>
+        </div>
+
+        <div class="glass card">
+          <div class="card-head">
+            <h2>Karyawan Terlambat / Tidak Masuk Hari Ini (${fmtTanggal(todayISO())})</h2>
+            <span class="pill-note">${data.perlu_dicek.length} orang</span>
+          </div>
+          <div class="riwayat">
+            ${data.perlu_dicek.length ? data.perlu_dicek.map((r) => {
+              const { shiftLabel } = parseCatatanBukti(r);
+              return `
+              <div class="riwayat-row">
+                <div>
+                  <div class="t">${esc(r.nama)}</div>
+                  <div class="s">${r.jam_masuk ? 'Masuk jam ' + fmtJam(r.jam_masuk) : 'Belum ada jam masuk'} ${shiftLabel ? '· ' + esc(shiftLabel) : ''}</div>
+                </div>
+                ${badge(r.status)}
+              </div>`;
+            }).join('') : '<p class="muted small">Tidak ada yang terlambat hari ini. Semua karyawan hadir tepat waktu.</p>'}
           </div>
         </div>
       </div>`;
+
+    let activeRange = 30;
+    let selectedDate = todayISO();
+
+    function renderTrendChart() {
+      const slice = full30Days.slice(full30Days.length - activeRange);
+      if (!slice.some((d) => d.tanggal === selectedDate) && slice.length) {
+        selectedDate = slice[slice.length - 1].tanggal;
+      }
+
+      byId('trend-title').textContent = `Grafik Kehadiran ${activeRange} Hari Terakhir`;
+
+      const sumHadir = slice.reduce((a, b) => a + b.hadir, 0);
+      const sumTepat = slice.reduce((a, b) => a + b.tepat, 0);
+      const sumLate = slice.reduce((a, b) => a + b.terlambat, 0);
+      const avgHadir = slice.length ? (sumHadir / slice.length).toFixed(1) : '0';
+      const pctTepat = sumHadir > 0 ? Math.round((sumTepat / sumHadir) * 100) : 0;
+      const pctLate = sumHadir > 0 ? (100 - pctTepat) : 0;
+      const bestDay = slice.reduce((best, cur) => (cur.hadir > (best?.hadir ?? -1) ? cur : best), slice[0]);
+
+      byId('trend-summary').innerHTML = `
+        <div class="trend-stat-box">
+          <div class="ts-label">Rata-rata Masuk per Hari</div>
+          <div class="ts-val">${avgHadir} orang <span class="muted small" style="font-weight:500">/ ${totalKaryawan}</span></div>
+        </div>
+        <div class="trend-stat-box">
+          <div class="ts-label">Hadir Tepat Waktu</div>
+          <div class="ts-val" style="color:var(--status-hadir)">${sumTepat} kali <span class="muted small" style="font-weight:500">(${pctTepat}%)</span></div>
+        </div>
+        <div class="trend-stat-box">
+          <div class="ts-label">Datang Terlambat</div>
+          <div class="ts-val" style="color:var(--status-terlambat)">${sumLate} kali <span class="muted small" style="font-weight:500">(${pctLate}%)</span></div>
+        </div>
+        <div class="trend-stat-box">
+          <div class="ts-label">Kehadiran Tertinggi</div>
+          <div class="ts-val">${bestDay ? `${bestDay.hadir} orang` : '—'} <span class="muted small" style="font-weight:500">${bestDay ? `(${fmtTanggal(bestDay.tanggal).split(',')[1]?.trim() || bestDay.tanggal})` : ''}</span></div>
+        </div>`;
+
+      const maxScale = Math.max(totalKaryawan, ...slice.map((t) => t.hadir), 4);
+      const midScale = Math.round(maxScale / 2);
+      byId('trend-yaxis').innerHTML = `
+        <span>${maxScale} org</span>
+        <span>${midScale} org</span>
+        <span>0</span>`;
+
+      byId('trend-bars').innerHTML = slice.map((t, idx) => {
+        const totalPct = Math.max(t.hadir > 0 ? 8 : 2, Math.round((t.hadir / maxScale) * 100));
+        const latePct = t.hadir > 0 ? Math.round((t.terlambat / t.hadir) * 100) : 0;
+        const ontimePct = 100 - latePct;
+        const dObj = new Date(t.tanggal + 'T00:00:00');
+        const tglNum = dObj.getDate();
+        const blnStr = BLN[dObj.getMonth()];
+        const showMonth = idx === 0 || tglNum === 1 || activeRange <= 14;
+        const lbl = showMonth ? `${tglNum} ${blnStr}` : `${tglNum}`;
+        const isActive = t.tanggal === selectedDate;
+
+        return `<div class="bar-col ${isActive ? 'active' : ''}" data-date="${t.tanggal}" title="${fmtTanggal(t.tanggal)}: ${t.hadir} masuk (${t.tepat} tepat waktu, ${t.terlambat} terlambat)">
+          <span class="bar-num">${t.hadir}</span>
+          <div class="bar-track">
+            <div class="bar-stack" style="height:${totalPct}%">
+              ${t.terlambat > 0 ? `<div class="bar-seg-late" style="height:${latePct}%"></div>` : ''}
+              ${t.tepat > 0 ? `<div class="bar-seg-ontime" style="height:${ontimePct}%"></div>` : ''}
+            </div>
+          </div>
+          <span class="bar-lbl">${lbl}</span>
+        </div>`;
+      }).join('');
+
+      byId('trend-bars').querySelectorAll('.bar-col').forEach((col) => {
+        col.addEventListener('click', () => {
+          selectedDate = col.dataset.date;
+          renderTrendChart();
+        });
+      });
+
+      const sel = slice.find((d) => d.tanggal === selectedDate) || slice[slice.length - 1];
+      if (sel) {
+        const tidakMasuk = Math.max(0, totalKaryawan - sel.hadir);
+        byId('trend-detail').innerHTML = `
+          <div>
+            <div style="font-weight:700;font-size:14px;color:var(--text)">
+              Rincian Tanggal: ${fmtTanggal(sel.tanggal)}
+            </div>
+            <div class="small" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:12px">
+              <span>Total Masuk: <b>${sel.hadir} dari ${totalKaryawan} orang</b></span>
+              <span style="color:var(--status-hadir)">● Tepat Waktu: <b>${sel.tepat} orang</b></span>
+              <span style="color:var(--status-terlambat)">● Terlambat: <b>${sel.terlambat} orang</b></span>
+              <span class="muted">● Tidak Masuk / Libur Shift: <b>${tidakMasuk} orang</b></span>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="trend-open-date">
+            Lihat Daftar Nama Tanggal ${fmtTanggal(sel.tanggal).split(',')[1]?.trim() || sel.tanggal} →
+          </button>`;
+
+        byId('trend-open-date')?.addEventListener('click', () => {
+          state.selectedHarianDate = sel.tanggal;
+          go('harian');
+        });
+      }
+    }
+
+    view.querySelectorAll('[data-range]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeRange = Number(btn.dataset.range);
+        view.querySelectorAll('[data-range]').forEach((b) => {
+          b.className = b === btn ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+        });
+        renderTrendChart();
+      });
+    });
+
+    renderTrendChart();
 
     byId('dash-go-harian')?.addEventListener('click', () => go('harian'));
     byId('dash-go-laporan')?.addEventListener('click', () => go('axel'));
@@ -395,8 +543,10 @@
 
   // ---------------- Absen Hari Ini ----------------
   async function viewHarian(view) {
+    const initialDate = state.selectedHarianDate || todayISO();
+    state.selectedHarianDate = null;
     view.innerHTML = `${pageHead('Absen Hari Ini', 'Pilih tanggal untuk melihat siapa saja yang sudah absen, cek foto bukti, atau ubah data jika ada kesalahan', `
-      <label class="field"><span>Pilih Tanggal</span><input type="date" id="harian-tgl" value="${todayISO()}"></label>
+      <label class="field"><span>Pilih Tanggal</span><input type="date" id="harian-tgl" value="${initialDate}"></label>
       <button class="btn btn-primary" id="harian-load">Lihat Data</button>`)}
       <div class="glass card" id="harian-box"><p class="muted">Sedang memuat data…</p></div>`;
 
@@ -428,7 +578,7 @@
           <tbody>
             ${data.map((r, idx) => `<tr>
               <td class="muted tabular">${idx + 1}</td>
-              <td style="font-weight:600">${esc(r.nama)}</td>
+              <td>${empCell(r.nama)}</td>
               <td>${esc(r.tim)}</td>
               <td>${r.status ? badge(r.status) : '<span class="badge badge-netral">Belum Absen</span>'}</td>
               <td class="tabular">${fmtJam(r.jam_masuk)}</td>
@@ -531,10 +681,32 @@
         dari: byId('r-dari').value, sampai: byId('r-sampai').value, tim: byId('r-tim').value
       });
       rows = data;
+      const totHadir = rows.reduce((a, b) => a + Number(b.hari_tercatat || 0), 0);
+      const avgLateAll = rows.length ? (rows.reduce((a, b) => a + Number(b.rata_terlambat || 0), 0) / rows.length).toFixed(1) : '0';
+      const avgWorkAll = rows.length ? (rows.reduce((a, b) => a + Number(b.rata_jam_kerja || 0), 0) / rows.length).toFixed(1) : '0';
+
       box.innerHTML = `
         <div class="card-head">
           <h2>Hasil Rekap Kehadiran Karyawan</h2>
           <span class="pill-note">${rows.length} karyawan</span>
+        </div>
+        <div class="trend-summary-strip">
+          <div class="trend-stat-box">
+            <div class="ts-label">Jumlah Karyawan</div>
+            <div class="ts-val">${rows.length} orang</div>
+          </div>
+          <div class="trend-stat-box">
+            <div class="ts-label">Total Kehadiran Tercatat</div>
+            <div class="ts-val" style="color:var(--status-hadir)">${totHadir} hari kerja</div>
+          </div>
+          <div class="trend-stat-box">
+            <div class="ts-label">Rata-rata Keterlambatan</div>
+            <div class="ts-val" style="color:var(--status-terlambat)">${avgLateAll} menit</div>
+          </div>
+          <div class="trend-stat-box">
+            <div class="ts-label">Rata-rata Lama Kerja</div>
+            <div class="ts-val">${avgWorkAll} jam / hari</div>
+          </div>
         </div>
         <div class="table-wrap"><table>
           <thead>
@@ -551,7 +723,7 @@
           </thead>
           <tbody>${rows.map((r, i) => `<tr>
             <td class="muted tabular">${i + 1}</td>
-            <td style="font-weight:600">${esc(r.nama)}</td>
+            <td>${empCell(r.nama)}</td>
             <td>${esc(r.tim)}</td>
             <td class="tabular"><span class="badge badge-hadir">${r.hari_tercatat} hari</span></td>
             <td class="tabular">${r.hari_tidak_hadir} hari</td>
@@ -810,13 +982,18 @@
           <tbody>
             ${details.map((m, idx) => `<tr>
               <td class="muted tabular">${idx + 1}</td>
-              <td style="font-weight:600">${esc(m.nama)}</td>
+              <td>${empCell(m.nama)}</td>
               <td>${esc(m.tim)}</td>
               <td class="tabular">${m.hari_tercatat} dari ${m.total_hari} hari</td>
               <td class="tabular">${m.rata_terlambat} menit</td>
               <td class="tabular">${m.persen_tidak_hadir}%</td>
               <td class="tabular">${m.rata_jam_kerja} jam/hari</td>
-              <td class="tabular"><b style="color:${m.clusterColor}">${m.skor_disiplin}</b> / 100</td>
+              <td class="tabular">
+                <div class="score-wrap">
+                  <div class="score-bar"><div class="score-fill" style="width:${m.skor_disiplin}%;background:${m.clusterColor}"></div></div>
+                  <span><b style="color:${m.clusterColor}">${m.skor_disiplin}</b>/100</span>
+                </div>
+              </td>
               <td><span class="chip" style="background:${m.clusterColor}">${esc(m.clusterLabel)}</span></td>
               <td class="small">${esc(m.rekomendasi)}</td>
             </tr>`).join('')}
@@ -1044,7 +1221,7 @@
           <tbody>${pageRows.map((r, idx) => `<tr>
             <td class="muted tabular">${startIdx + idx + 1}</td>
             <td>${fmtTanggal(r.tanggal)}</td>
-            <td style="font-weight:600">${esc(r.nama)}</td>
+            <td>${empCell(r.nama)}</td>
             <td>${esc(r.tim)}</td>
             <td>${badge(r.status)}</td>
             <td class="tabular">${fmtJam(r.jam_masuk)}</td>
@@ -1315,7 +1492,7 @@
           </thead>
           <tbody>${data.map((u, idx) => `<tr>
             <td class="muted tabular">${idx + 1}</td>
-            <td style="font-weight:600">${esc(u.nama)}</td>
+            <td>${empCell(u.nama)}</td>
             <td>${esc(u.email)}</td>
             <td>${PERAN_LABEL[u.peran] || esc(u.peran)}</td>
             <td><span class="shift-tag">${esc(u.tim)}</span></td>
