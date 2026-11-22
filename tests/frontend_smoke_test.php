@@ -27,8 +27,10 @@ check(str_contains($login, 'id="login-form"') && str_contains($login, 'id="toggl
 check(str_contains($login, 'Masuk sebagai Admin') || str_contains($login, 'Login Admin'), 'login.html clearly labels admin-only login');
 check(!str_contains($login, 'kiosk-open-btn') && !str_contains($login, 'kiosk.info') && !str_contains($login, 'kiosk.absen'), 'login.html has no legacy kiosk UI/endpoints');
 
-// index.html checks
-check(str_contains($index, 'ketik-icon.png') && str_contains($index, 'Ketik.com'), 'index.html displays Ketik.com icon and title');
+// index.html checks (Ketik.com Modern Corporate Admin Shell)
+check(str_contains($index, 'ketik-icon.png') && str_contains($index, 'ketik-logo.png') && str_contains($index, 'Ketik.com'), 'index.html displays Ketik.com logo, icon, and title');
+check(str_contains($index, 'ketik-side-brand') && str_contains($index, 'ketik-side-portal'), 'index.html includes Ketik.com executive sidebar & QR portal shortcut');
+check(str_contains($index, 'ketik-live-chip'), 'index.html includes Command Center topbar chip');
 check(str_contains($index, 'id="nav-desktop"') && str_contains($index, 'id="nav-mobile"'), 'index.html has desktop and mobile navs');
 check(str_contains($index, 'id="top-org"') && str_contains($index, 'id="top-clock"') && str_contains($index, 'id="top-schedule"'), 'index.html has #top-org, #top-clock, and #top-schedule');
 check(str_contains($index, 'id="theme-toggle"'), 'index.html has #theme-toggle');
@@ -36,7 +38,7 @@ check(!str_contains($index, 'badge-hadir">Aktif'), 'index.html removes pulsing A
 check(!preg_match('/🌙|☀️|📍/u', $index), 'index.html contains no emoji icons');
 
 // app.css checks
-foreach (['.ketik-header', '.ketik-nav-strip', '.pass-wrap', '.mode-switch', '.badge-wfo', '.badge-wfh', '.nav-group-label', '.schedule-pill', '.qr-id-card'] as $sel) {
+foreach (['.ketik-header', '.ketik-nav-strip', '.ketik-dash-hero', '.ketik-side-brand', '.metric-ico', '.seg-tabs', '.dash-bottom-grid', '.pass-wrap', '.mode-switch', '.badge-wfo', '.badge-wfh', '.nav-group-label', '.schedule-pill', '.qr-id-card'] as $sel) {
     check(str_contains($css, $sel), "app.css defines {$sel}");
 }
 check(str_contains(strtolower($css), '#0a88c9') && str_contains(strtolower($css), '#3abca5'), 'app.css applies Ketik.com #0A88C9 and #3ABCA5 brand colors');

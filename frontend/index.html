@@ -16,17 +16,21 @@
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="brand">
-      <span class="brand-icon-box" aria-hidden="true">
-        <img src="assets/img/ketik-icon.png" alt="Logo Ketik.com">
-      </span>
-      <div style="min-width:0">
-        <h1>Ketik.com</h1>
-        <p class="muted small" id="side-org" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">PT Ketik Media Siber</p>
+    <div class="ketik-side-brand">
+      <div class="ketik-side-logo">
+        <img src="assets/img/ketik-logo.png" alt="Logo Ketik.com">
+      </div>
+      <div class="ketik-side-org">
+        <span class="ketik-side-kicker">Workspace Admin</span>
+        <p id="side-org" title="Organisasi">PT Ketik Media Siber</p>
       </div>
     </div>
     <nav class="nav" id="nav-desktop" aria-label="Menu navigasi"></nav>
     <div class="sidebar-foot">
+      <a class="ketik-side-portal" href="login.html" target="_blank" rel="noopener noreferrer">
+        <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM17 17h4v4h-4zM14 20h2"/></svg>
+        <span>Portal Scan QR Redaksi</span>
+      </a>
       <div class="user-chip">
         <span class="avatar" id="user-avatar">A</span>
         <div style="min-width:0">
@@ -35,8 +39,8 @@
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button class="btn btn-secondary btn-sm" id="theme-toggle" type="button" title="Ubah tampilan terang atau gelap">Mode Gelap</button>
-        <button class="btn btn-ghost btn-sm" id="logout-btn" type="button">Keluar</button>
+        <button class="btn ketik-side-btn btn-sm" id="theme-toggle" type="button" title="Ubah tampilan terang atau gelap">Mode Gelap</button>
+        <button class="btn ketik-side-btn btn-sm" id="logout-btn" type="button">Keluar</button>
       </div>
     </div>
   </aside>
@@ -44,6 +48,7 @@
   <div class="main-wrap">
     <header class="topbar">
       <div class="topbar-left">
+        <span class="ketik-live-chip">Command Center</span>
         <span class="topbar-org" id="top-org">Ketik.com · Absensi Karyawan</span>
         <span class="topbar-divider"></span>
         <span class="topbar-date tabular" id="top-clock">—</span>

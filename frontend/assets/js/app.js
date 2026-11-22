@@ -188,7 +188,10 @@
     laptop: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
     mapPin: '<path d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    alert: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM17 17h4v4h-4zM14 20h2"/>'
   };
 
   function ico(name, size = 18) {
@@ -303,7 +306,7 @@
       const segments = [
         { val: jmlTepat, color: '#16a34a' },
         { val: jmlTerlambat, color: '#f59e0b' },
-        { val: jmlIzinSakit, color: '#0284c7' },
+        { val: jmlIzinSakit, color: '#0A88C9' },
         { val: jmlBelum, color: '#94a3b8' }
       ].filter((s) => s.val > 0);
 
@@ -323,33 +326,79 @@
     }
 
     const pctOf = (n) => (totalKaryawan > 0 ? Math.round((n / totalKaryawan) * 100) : 0);
+    const jmlWfo = Number(h.wfo || 0);
+    const jmlWfh = Number(h.wfh || 0);
+    const wfoPct = totalHadirHariIni > 0 ? Math.round((jmlWfo / totalHadirHariIni) * 100) : 0;
+    const wfhPct = totalHadirHariIni > 0 ? Math.max(0, 100 - wfoPct) : 0;
+    const jamNow = new Date().getHours();
+    const sapaanAdmin = jamNow < 11 ? 'Selamat pagi' : jamNow < 15 ? 'Selamat siang' : jamNow < 19 ? 'Selamat sore' : 'Selamat malam';
 
     view.innerHTML = `
-      ${pageHead('Beranda', `Ringkasan kehadiran karyawan ${state.org.nama} hari ini (${fmtTanggal(todayISO())})`, `
-        <button class="btn btn-secondary btn-sm" id="dash-go-harian">Cek Absen Hari Ini</button>
-        <button class="btn btn-primary btn-sm" id="dash-go-laporan">Lihat Semua Riwayat</button>
-      `)}
       <div class="stack">
+        <section class="ketik-dash-hero">
+          <div>
+            <span class="hero-kicker">${ico('qr', 13)} Command Center Ketik.com</span>
+            <h2>${sapaanAdmin}, ${esc(state.user.nama.split(' ')[0] || 'Admin')}</h2>
+            <p class="hero-sub">Pantau kehadiran redaksi di kantor (WFO) dan tim liputan lapangan secara real-time · ${fmtTanggal(todayISO())}</p>
+            <div class="hero-actions">
+              <button class="btn btn-sm hero-btn-light" id="dash-go-harian">${ico('clock', 15)} Cek Absen Hari Ini</button>
+              <button class="btn btn-sm hero-btn-glass" id="dash-go-karyawan">${ico('qr', 15)} Kartu QR Karyawan</button>
+              <button class="btn btn-sm hero-btn-glass" id="dash-go-izin">${ico('cal', 15)} Catat Izin / Sakit</button>
+              <button class="btn btn-sm hero-btn-glass" id="dash-go-laporan">${ico('db', 15)} Riwayat &amp; Ekspor</button>
+            </div>
+          </div>
+          <div class="hero-split-box">
+            <div class="hero-split-head">
+              <span>Tingkat Kehadiran Hari Ini</span>
+              <b>${pctHadir}%</b>
+            </div>
+            <div class="hero-split-track" aria-label="Sebaran WFO dan WFH hari ini">
+              <span class="hero-split-wfo" style="width:${totalHadirHariIni ? wfoPct : 50}%"></span>
+              <span class="hero-split-wfh" style="width:${totalHadirHariIni ? wfhPct : 50}%"></span>
+            </div>
+            <div class="hero-split-meta">
+              <span><i class="hero-dot" style="background:#38bdf8"></i>Kantor Redaksi (WFO): <b>${jmlWfo} org</b></span>
+              <span><i class="hero-dot" style="background:#3ABCA5"></i>Liputan / WFH: <b>${jmlWfh} org</b></span>
+            </div>
+          </div>
+        </section>
+
         <div class="grid grid-4">
           <div class="glass card metric accent-hadir">
-            <div class="label">Sudah Masuk Hari Ini</div>
-            <div class="value">${totalHadirHariIni} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">dari ${totalKaryawan} orang</span></div>
-            <div class="sublabel">${pctHadir}% hadir · WFO: ${h.wfo || 0} · WFH: ${h.wfh || 0}</div>
+            <div class="metric-top">
+              <div class="label">Sudah Masuk Hari Ini</div>
+              <span class="metric-ico">${ico('check', 16)}</span>
+            </div>
+            <div class="value">${totalHadirHariIni} <span style="font-size:13.5px;font-weight:500;color:var(--text-muted)">/ ${totalKaryawan} org</span></div>
+            <div class="metric-bar"><span style="width:${pctHadir}%"></span></div>
+            <div class="sublabel">${pctHadir}% hadir · WFO: ${jmlWfo} · WFH: ${jmlWfh}</div>
           </div>
           <div class="glass card metric accent-terlambat">
-            <div class="label">Datang Terlambat</div>
-            <div class="value">${jmlTerlambat} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="metric-top">
+              <div class="label">Datang Terlambat</div>
+              <span class="metric-ico">${ico('clock', 16)}</span>
+            </div>
+            <div class="value">${jmlTerlambat} <span style="font-size:13.5px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="metric-bar"><span style="width:${pctOf(jmlTerlambat)}%"></span></div>
             <div class="sublabel">Lewat batas toleransi ${state.org.toleransi_menit} menit</div>
           </div>
           <div class="glass card metric accent-izin">
-            <div class="label">Izin / Sakit</div>
-            <div class="value">${jmlIzinSakit} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="metric-top">
+              <div class="label">Izin / Sakit</div>
+              <span class="metric-ico">${ico('cal', 16)}</span>
+            </div>
+            <div class="value">${jmlIzinSakit} <span style="font-size:13.5px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="metric-bar"><span style="width:${pctOf(jmlIzinSakit)}%"></span></div>
             <div class="sublabel">Izin: ${h.izin || 0} · Sakit: ${h.sakit || 0}</div>
           </div>
           <div class="glass card metric accent-alpa">
-            <div class="label">Belum Absen</div>
-            <div class="value">${jmlBelum} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
-            <div class="sublabel">Belum absen: ${h.belum} · Tidak masuk: ${h.alpa}</div>
+            <div class="metric-top">
+              <div class="label">Belum Absen</div>
+              <span class="metric-ico">${ico('alert', 16)}</span>
+            </div>
+            <div class="value">${jmlBelum} <span style="font-size:13.5px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="metric-bar"><span style="width:${pctOf(jmlBelum)}%"></span></div>
+            <div class="sublabel">Belum absen: ${h.belum} · Alpa: ${h.alpa}</div>
           </div>
         </div>
 
@@ -357,10 +406,10 @@
           <div class="glass card">
             <div class="card-head">
               <div>
-                <h2>Ringkasan Hari Ini</h2>
-                <p class="muted small">Pembagian status seluruh karyawan</p>
+                <h2>Komposisi Kehadiran</h2>
+                <p class="muted small">Pembagian status seluruh tim hari ini</p>
               </div>
-              <span class="pill-note">${totalKaryawan} orang</span>
+              <span class="pill-note">${totalKaryawan} karyawan</span>
             </div>
             <div class="donut-layout">
               <div class="donut-box">
@@ -380,7 +429,7 @@
                   <span class="donut-row-r">${jmlTerlambat} org <span>(${pctOf(jmlTerlambat)}%)</span></span>
                 </div>
                 <div class="donut-row">
-                  <span class="donut-row-l"><i class="donut-dot" style="background:#0284c7"></i>Izin / Sakit</span>
+                  <span class="donut-row-l"><i class="donut-dot" style="background:#0A88C9"></i>Izin / Sakit</span>
                   <span class="donut-row-r">${jmlIzinSakit} org <span>(${pctOf(jmlIzinSakit)}%)</span></span>
                 </div>
                 <div class="donut-row">
@@ -397,10 +446,10 @@
                 <h2 id="trend-title">Kehadiran 7 Hari Terakhir</h2>
                 <p class="muted small">Klik batang tanggal untuk melihat rincian &amp; daftar nama</p>
               </div>
-              <div style="display:flex;gap:6px;align-items:center">
-                <button class="btn btn-primary btn-sm" data-range="7">7 Hari</button>
-                <button class="btn btn-secondary btn-sm" data-range="14">14 Hari</button>
-                <button class="btn btn-secondary btn-sm" data-range="30">30 Hari</button>
+              <div class="seg-tabs" role="tablist" aria-label="Rentang waktu grafik">
+                <button class="seg-tab active" data-range="7">7 Hari</button>
+                <button class="seg-tab" data-range="14">14 Hari</button>
+                <button class="seg-tab" data-range="30">30 Hari</button>
               </div>
             </div>
 
@@ -421,23 +470,64 @@
           </div>
         </div>
 
-        <div class="glass card">
-          <div class="card-head">
-            <h2>Karyawan Terlambat / Tidak Masuk Hari Ini (${fmtTanggal(todayISO())})</h2>
-            <span class="pill-note">${data.perlu_dicek.length} orang</span>
+        <div class="dash-bottom-grid">
+          <div class="glass card">
+            <div class="card-head">
+              <div>
+                <h2>Perlu Dicek Hari Ini</h2>
+                <p class="muted small">Karyawan terlambat atau belum melakukan scan QR (${fmtTanggal(todayISO())})</p>
+              </div>
+              <span class="pill-note">${data.perlu_dicek.length} orang</span>
+            </div>
+            <div class="riwayat">
+              ${data.perlu_dicek.length ? data.perlu_dicek.map((r) => {
+                const { shiftLabel } = parseCatatanBukti(r);
+                return `
+                <div class="riwayat-row">
+                  <div>
+                    <div class="t">${esc(r.nama)}</div>
+                    <div class="s">${r.jam_masuk ? 'Masuk jam ' + fmtJam(r.jam_masuk) : 'Belum ada jam masuk'} ${shiftLabel ? '· ' + esc(shiftLabel) : ''}</div>
+                  </div>
+                  ${badge(r.status)}
+                </div>`;
+              }).join('') : '<p class="muted small">Tidak ada yang terlambat hari ini. Semua karyawan hadir tepat waktu.</p>'}
+            </div>
           </div>
-          <div class="riwayat">
-            ${data.perlu_dicek.length ? data.perlu_dicek.map((r) => {
-              const { shiftLabel } = parseCatatanBukti(r);
-              return `
-              <div class="riwayat-row">
+
+          <div class="glass card">
+            <div class="card-head">
+              <div>
+                <h2>Distribusi Lokasi &amp; Akses Cepat</h2>
+                <p class="muted small">Mode kerja redaksi &amp; pintasan admin</p>
+              </div>
+              <span class="shift-tag">${esc(state.org.kode_lokasi || 'KETIK-SBY-01')}</span>
+            </div>
+            <div class="mode-breakdown">
+              <div class="mode-breakdown-row">
                 <div>
-                  <div class="t">${esc(r.nama)}</div>
-                  <div class="s">${r.jam_masuk ? 'Masuk jam ' + fmtJam(r.jam_masuk) : 'Belum ada jam masuk'} ${shiftLabel ? '· ' + esc(shiftLabel) : ''}</div>
+                  <span class="badge-wfo">WFO · Kantor Redaksi</span>
+                  <div class="muted small" style="margin-top:4px">Radius aktif: ${Number(state.org.radius_masuk_m) > 0 ? esc(state.org.radius_masuk_m) + ' m' : 'Tanpa batas jarak'}</div>
                 </div>
-                ${badge(r.status)}
-              </div>`;
-            }).join('') : '<p class="muted small">Tidak ada yang terlambat hari ini. Semua karyawan hadir tepat waktu.</p>'}
+                <div style="text-align:right">
+                  <div class="tabular" style="font-size:20px;font-weight:700">${jmlWfo} org</div>
+                  <div class="muted small">${wfoPct}% hadir</div>
+                </div>
+              </div>
+              <div class="mode-breakdown-row">
+                <div>
+                  <span class="badge-wfh">Liputan / WFH</span>
+                  <div class="muted small" style="margin-top:4px">Wajib isi catatan liputan/kegiatan</div>
+                </div>
+                <div style="text-align:right">
+                  <div class="tabular" style="font-size:20px;font-weight:700">${jmlWfh} org</div>
+                  <div class="muted small">${wfhPct}% hadir</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">
+                <button class="btn btn-secondary btn-sm" id="dash-go-pengaturan">${ico('gear', 14)} Atur Jam &amp; Lokasi Kantor</button>
+                <button class="btn btn-secondary btn-sm" id="dash-go-rekap">${ico('chart', 14)} Lihat Rekap Bulanan</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>`;
@@ -539,7 +629,7 @@
       btn.addEventListener('click', () => {
         activeRange = Number(btn.dataset.range);
         view.querySelectorAll('[data-range]').forEach((b) => {
-          b.className = b === btn ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+          b.className = b === btn ? 'seg-tab active' : 'seg-tab';
         });
         renderTrendChart();
       });
@@ -548,7 +638,11 @@
     renderTrendChart();
 
     byId('dash-go-harian')?.addEventListener('click', () => go('harian'));
+    byId('dash-go-karyawan')?.addEventListener('click', () => go('karyawan'));
+    byId('dash-go-izin')?.addEventListener('click', () => go('izin'));
     byId('dash-go-laporan')?.addEventListener('click', () => go('axel'));
+    byId('dash-go-pengaturan')?.addEventListener('click', () => go('pengaturan'));
+    byId('dash-go-rekap')?.addEventListener('click', () => go('rekap'));
   }
 
   // ---------------- Absen Hari Ini ----------------
