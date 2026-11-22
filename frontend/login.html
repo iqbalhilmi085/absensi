@@ -12,6 +12,44 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .qr-profile-head {
+    display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+  }
+  .qr-avatar-box {
+    width: 46px; height: 46px; border-radius: 12px; overflow: hidden; flex-shrink: 0;
+    background: var(--surface-subtle); border: 1px solid var(--panel-border);
+    display: grid; place-items: center; font-weight: 700; font-size: 15px; color: var(--brand);
+  }
+  .qr-avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .qr-self-tabs {
+    display: flex; gap: 6px; padding: 4px; border-radius: 11px;
+    background: var(--surface-subtle); border: 1px solid var(--panel-border);
+  }
+  .qr-self-tab {
+    flex: 1; border: 0; background: transparent; color: var(--text-muted);
+    font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 10px;
+    border-radius: 8px; cursor: pointer; transition: .15s ease;
+  }
+  .qr-self-tab.active {
+    background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(15,23,42,.08);
+  }
+  .qr-tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .qr-hist-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    padding: 9px 11px; border-radius: 10px; border: 1px solid var(--panel-border);
+    background: var(--surface-subtle); font-size: 12.5px;
+  }
+  .qr-ringkasan-strip {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  }
+  .qr-ring-box {
+    padding: 8px 10px; border-radius: 10px; background: var(--surface-subtle);
+    border: 1px solid var(--panel-border); text-align: center;
+  }
+  .qr-ring-box b { display: block; font-size: 16px; color: var(--text); }
+  .qr-ring-box span { font-size: 11px; color: var(--text-muted); }
+</style>
 </head>
 <body class="ketik-portal-body">
   <header class="ketik-header">
@@ -85,66 +123,111 @@
           </div>
 
           <div id="qr-emp-panel" class="stack" hidden>
-            <div class="config-summary" style="justify-content:space-between">
-              <div>
-                <div style="font-weight:700;font-size:15px;color:var(--text)" id="qr-emp-nama">—</div>
-                <div class="small muted" id="qr-emp-meta">—</div>
+            <div class="config-summary" style="justify-content:space-between;align-items:flex-start;gap:10px">
+              <div class="qr-profile-head">
+                <div class="qr-avatar-box" id="qr-emp-avatar">—</div>
+                <div style="min-width:0">
+                  <div style="font-weight:700;font-size:15px;color:var(--text)" id="qr-emp-nama">—</div>
+                  <div class="small muted" id="qr-emp-meta">—</div>
+                  <div class="qr-tag-row" id="qr-emp-tags"></div>
+                </div>
               </div>
               <span class="badge badge-netral" id="qr-emp-badge">Belum Absen</span>
             </div>
 
-            <div id="qr-digital-card" class="qr-digital-mini" hidden>
-              <div class="qr-holder" id="qr-digital-svg" style="padding:8px"></div>
-              <div style="min-width:0">
-                <div style="font-weight:700;font-size:13px;color:var(--text)">Kartu QR Pribadi Anda</div>
-                <div class="small muted">Simpan atau screenshot QR ini untuk absen berikutnya.</div>
-                <div class="qr-code-pill" id="qr-digital-code" style="margin-top:6px">—</div>
+            <div class="qr-self-tabs" role="tablist" aria-label="Menu Anggota">
+              <button type="button" class="qr-self-tab active" data-qtab="absen">Absen</button>
+              <button type="button" class="qr-self-tab" data-qtab="riwayat">Riwayat Saya</button>
+              <button type="button" class="qr-self-tab" data-qtab="izin">Ajukan Izin</button>
+            </div>
+
+            <div id="qr-tab-absen" class="stack">
+              <div id="qr-digital-card" class="qr-digital-mini" hidden>
+                <div class="qr-holder" id="qr-digital-svg" style="padding:8px"></div>
+                <div style="min-width:0">
+                  <div style="font-weight:700;font-size:13px;color:var(--text)">Kartu QR Pribadi Anda</div>
+                  <div class="small muted">Simpan atau screenshot QR ini untuk absen berikutnya.</div>
+                  <div class="qr-code-pill" id="qr-digital-code" style="margin-top:6px">—</div>
+                </div>
+              </div>
+
+              <div id="qr-done-box" class="alert alert-ok" hidden></div>
+
+              <div id="qr-form-box" class="form">
+                <div class="field" id="qr-mode-wrap">
+                  <span>Mode Kerja Saat Ini</span>
+                  <div class="mode-switch" id="qr-mode-switch">
+                    <button type="button" class="mode-opt active" data-mode="wfo">
+                      <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+                      <div>
+                        <span class="mode-opt-title">Kantor Redaksi (WFO)</span>
+                        <span class="mode-opt-desc">Di kantor Ketik.com</span>
+                      </div>
+                    </button>
+                    <button type="button" class="mode-opt" data-mode="wfh">
+                      <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                      <div>
+                        <span class="mode-opt-title">Liputan / WFH</span>
+                        <span class="mode-opt-desc">Di lapangan + kegiatan</span>
+                      </div>
+                    </button>
+                  </div>
+                  <div class="muted small" id="qr-mode-hint" style="margin-top:4px"></div>
+                </div>
+
+                <label class="field" id="qr-shift-wrap">
+                  <span>Shift Kerja Hari Ini</span>
+                  <select id="qr-shift">
+                    <option value="">Sesuai Jadwal Divisi</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span id="qr-keg-label">Catatan Liputan / Kegiatan</span>
+                  <textarea id="qr-kegiatan" placeholder="Contoh: Liputan konferensi pers di Balai Kota dan kirim berita ke redaktur"></textarea>
+                </label>
+
+                <div id="qr-submit-err" class="alert alert-error" hidden></div>
+                <div id="qr-submit-ok" class="alert alert-ok" hidden></div>
+
+                <button type="button" class="btn btn-primary btn-lg btn-block" id="qr-submit-btn">
+                  Ambil Foto &amp; Kirim Absen
+                </button>
               </div>
             </div>
 
-            <div id="qr-done-box" class="alert alert-ok" hidden></div>
-
-            <div id="qr-form-box" class="form">
-              <div class="field" id="qr-mode-wrap">
-                <span>Mode Kerja Saat Ini</span>
-                <div class="mode-switch" id="qr-mode-switch">
-                  <button type="button" class="mode-opt active" data-mode="wfo">
-                    <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
-                    <div>
-                      <span class="mode-opt-title">Kantor Redaksi (WFO)</span>
-                      <span class="mode-opt-desc">Di kantor Ketik.com</span>
-                    </div>
-                  </button>
-                  <button type="button" class="mode-opt" data-mode="wfh">
-                    <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                    <div>
-                      <span class="mode-opt-title">Liputan / WFH</span>
-                      <span class="mode-opt-desc">Di lapangan + kegiatan</span>
-                    </div>
-                  </button>
-                </div>
-                <div class="muted small" id="qr-mode-hint" style="margin-top:4px"></div>
+            <div id="qr-tab-riwayat" class="stack" hidden>
+              <div id="qr-riwayat-summary" class="qr-ringkasan-strip"></div>
+              <div id="qr-riwayat-list" class="stack" style="gap:8px;max-height:280px;overflow:auto">
+                <p class="muted small">Memuat riwayat kehadiran pribadi…</p>
               </div>
+            </div>
 
-              <label class="field" id="qr-shift-wrap">
-                <span>Shift Kerja Hari Ini</span>
-                <select id="qr-shift">
-                  <option value="">Sesuai Jadwal Divisi</option>
+            <form id="qr-tab-izin" class="form" hidden>
+              <label class="field">
+                <span>Jenis Pengajuan</span>
+                <select id="qi-jenis">
+                  <option value="izin">Izin (Keperluan / Cuti)</option>
+                  <option value="sakit">Sakit</option>
+                  <option value="dinas_luar">Dinas Luar / Liputan Khusus</option>
                 </select>
               </label>
-
+              <div class="field-row">
+                <label class="field"><span>Mulai Tanggal</span><input type="date" id="qi-mulai" required></label>
+                <label class="field"><span>Sampai Tanggal</span><input type="date" id="qi-sampai" required></label>
+              </div>
               <label class="field">
-                <span id="qr-keg-label">Catatan Liputan / Kegiatan</span>
-                <textarea id="qr-kegiatan" placeholder="Contoh: Liputan konferensi pers di Balai Kota dan kirim berita ke redaktur"></textarea>
+                <span>Alasan / Keterangan</span>
+                <textarea id="qi-catatan" required placeholder="Tuliskan alasan izin, sakit, atau surat tugas dinas luar…"></textarea>
               </label>
-
-              <div id="qr-submit-err" class="alert alert-error" hidden></div>
-              <div id="qr-submit-ok" class="alert alert-ok" hidden></div>
-
-              <button type="button" class="btn btn-primary btn-lg btn-block" id="qr-submit-btn">
-                Ambil Foto &amp; Kirim Absen
-              </button>
-            </div>
+              <label class="field">
+                <span>Lampiran Surat / Bukti Foto (Opsional)</span>
+                <input type="file" id="qi-foto" accept="image/png,image/jpeg,image/webp">
+              </label>
+              <div id="qi-err" class="alert alert-error" hidden></div>
+              <div id="qi-ok" class="alert alert-ok" hidden></div>
+              <button type="submit" class="btn btn-primary btn-block" id="qi-submit">Kirim Pengajuan ke Admin</button>
+            </form>
           </div>
         </div>
       </div>
@@ -268,6 +351,77 @@
     let activeQrCode = '';
     let activeLookup = null;
     let selectedMode = 'wfo';
+    let activeQTab = 'absen';
+
+    const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    function localTodayISO() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    function resizeImageFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error('File bukan gambar valid.'));
+          img.onload = () => {
+            const maxDim = 900;
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            c.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(c.toDataURL('image/jpeg', 0.82));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function switchQTab(tab) {
+      activeQTab = tab;
+      document.querySelectorAll('[data-qtab]').forEach((b) => b.classList.toggle('active', b.dataset.qtab === tab));
+      byId('qr-tab-absen').hidden = tab !== 'absen';
+      byId('qr-tab-riwayat').hidden = tab !== 'riwayat';
+      byId('qr-tab-izin').hidden = tab !== 'izin';
+      if (tab === 'riwayat' && activeQrCode) loadSelfRiwayat();
+    }
+    document.querySelectorAll('[data-qtab]').forEach((b) => {
+      b.addEventListener('click', () => switchQTab(b.dataset.qtab));
+    });
+
+    async function loadSelfRiwayat() {
+      if (!activeQrCode) return;
+      const listEl = byId('qr-riwayat-list');
+      const sumEl = byId('qr-riwayat-summary');
+      listEl.innerHTML = '<p class="muted small">Memuat riwayat kehadiran…</p>';
+      try {
+        const res = await Api.post('qr.riwayat', { kode_qr: activeQrCode });
+        const d = res.data || {};
+        const r = d.ringkasan || {};
+        sumEl.innerHTML = `
+          <div class="qr-ring-box"><b>${r.hadir || 0}</b><span>Tepat Waktu</span></div>
+          <div class="qr-ring-box"><b>${r.terlambat || 0}</b><span>Terlambat</span></div>
+          <div class="qr-ring-box"><b>${r.izin_sakit || 0}</b><span>Izin / Sakit</span></div>`;
+        const rows = d.riwayat || [];
+        const labelStatus = { hadir: 'Tepat Waktu', terlambat: 'Terlambat', izin: 'Izin', sakit: 'Sakit', alpa: 'Alpa' };
+        listEl.innerHTML = rows.length ? rows.map((x) => {
+          const apv = x.approval_status && x.approval_status !== 'disetujui' ? ` (${escHtml(x.approval_status)})` : '';
+          return `<div class="qr-hist-item">
+            <div>
+              <div style="font-weight:700">${escHtml(x.tanggal)}</div>
+              <div class="muted small">Masuk ${escHtml((x.jam_masuk || '').slice(0, 5) || '—')} · Pulang ${escHtml((x.jam_pulang || '').slice(0, 5) || '—')}${apv}</div>
+            </div>
+            <span class="badge badge-${escHtml(x.status || 'netral')}">${escHtml(labelStatus[x.status] || x.status)}</span>
+          </div>`;
+        }).join('') : '<p class="muted small">Belum ada riwayat kehadiran 14 hari terakhir.</p>';
+      } catch (err) {
+        listEl.innerHTML = `<p class="muted small">${escHtml(err.message || 'Gagal memuat riwayat.')}</p>`;
+      }
+    }
 
     function updateModeHint() {
       if (!activeLookup) return;
@@ -293,11 +447,31 @@
       byId('qr-emp-panel').hidden = false;
       byId('qr-submit-err').hidden = true;
       byId('qr-submit-ok').hidden = true;
+      byId('qi-err').hidden = true;
+      byId('qi-ok').hidden = true;
+      byId('qi-mulai').value = localTodayISO();
+      byId('qi-sampai').value = localTodayISO();
+      switchQTab('absen');
+
+      const avatarBox = byId('qr-emp-avatar');
+      if (k.foto_url) {
+        avatarBox.innerHTML = `<img src="${escHtml(k.foto_url)}" alt="${escHtml(k.nama)}">`;
+      } else {
+        const parts = String(k.nama || '').trim().split(/\s+/).filter(Boolean);
+        avatarBox.textContent = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : String(k.nama || '?').slice(0, 2).toUpperCase();
+      }
 
       const jDiv = data.jadwal_divisi || {};
       const schedLabel = jDiv.jam_masuk && jDiv.jam_pulang ? ` · ${jDiv.jam_masuk}–${jDiv.jam_pulang} WIB` : '';
       byId('qr-emp-nama').textContent = k.nama;
       byId('qr-emp-meta').textContent = `${k.tim}${k.jabatan ? ' · ' + k.jabatan : ''}${schedLabel}`;
+
+      const tagsEl = byId('qr-emp-tags');
+      const tipeBadge = k.tipe === 'magang'
+        ? `<span class="badge badge-izin">Magang${k.tgl_selesai ? ' · s/d ' + escHtml(k.tgl_selesai) : ''}</span>`
+        : `<span class="badge badge-netral">Karyawan</span>`;
+      const anomBadge = h.anomali ? `<span class="badge badge-terlambat">Anomali: ${escHtml(h.anomali)}</span>` : '';
+      tagsEl.innerHTML = tipeBadge + anomBadge;
 
       const shiftSel = byId('qr-shift');
       if (shiftSel) {
@@ -458,6 +632,7 @@
         const payload = {
           kode_qr: activeQrCode,
           mode: modeUsed,
+          expected_state: activeLookup.hari_ini.state,
           shift_id: activeLookup.hari_ini.state === 'in' && byId('qr-shift') ? (Number(byId('qr-shift').value) || 0) : 0,
           kegiatan: kegiatanVal,
           foto: shot.foto,
@@ -479,6 +654,51 @@
         }
       } finally {
         submitBtn.disabled = false;
+      }
+    });
+
+    byId('qr-tab-izin').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!activeQrCode) return;
+      const errEl = byId('qi-err');
+      const okEl = byId('qi-ok');
+      const btn = byId('qi-submit');
+      errEl.hidden = true; okEl.hidden = true;
+      const mulai = byId('qi-mulai').value;
+      const sampai = byId('qi-sampai').value;
+      const catatan = byId('qi-catatan').value.trim();
+      if (!mulai || !sampai || sampai < mulai) {
+        errEl.textContent = 'Rentang tanggal tidak valid.';
+        errEl.hidden = false; return;
+      }
+      if (catatan.length < 3) {
+        errEl.textContent = 'Mohon isi alasan minimal 3 karakter.';
+        errEl.hidden = false; return;
+      }
+      btn.disabled = true;
+      try {
+        let foto = '';
+        const fInput = byId('qi-foto');
+        if (fInput && fInput.files && fInput.files[0]) {
+          foto = await resizeImageFile(fInput.files[0]);
+        }
+        const res = await Api.post('qr.izin', {
+          kode_qr: activeQrCode,
+          jenis: byId('qi-jenis').value,
+          mulai,
+          sampai,
+          catatan,
+          foto
+        });
+        okEl.textContent = res.pesan || 'Pengajuan izin dikirim ke Admin.';
+        okEl.hidden = false;
+        byId('qi-catatan').value = '';
+        if (fInput) fInput.value = '';
+      } catch (err) {
+        errEl.textContent = err.message || 'Gagal mengirim pengajuan.';
+        errEl.hidden = false;
+      } finally {
+        btn.disabled = false;
       }
     });
 

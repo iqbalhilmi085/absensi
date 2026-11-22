@@ -25,6 +25,7 @@ define('DB_USER', 'root');
 define('DB_PASS', '');
 
 define('APP_NAME', 'Absensi Ketik.com');
+define('QR_HMAC_SECRET', getenv('ABSENSI_QR_SECRET') ?: hash('sha256', __DIR__ . '|ketik-com-qr-v1-secret'));
 
 // Keamanan login (LANGKAH 2)
 define('LOGIN_MAX_FAILS', 5);        // jumlah percobaan gagal sebelum dikunci

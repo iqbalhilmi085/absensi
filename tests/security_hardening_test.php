@@ -212,4 +212,21 @@ check($divBadTime['code'] === 422, "divisi.save rejects invalid time 29:00 with 
 $shiftBadTime = secReq("{$base}/backend/api.php?action=shift.save", $ckAdm, ['nama' => 'Shift X', 'jam_masuk' => '08:00', 'jam_pulang' => 'xx:yy'], $csrfAdm);
 check($shiftBadTime['code'] === 422, "shift.save rejects invalid time xx:yy with 422 (got {$shiftBadTime['code']})");
 
+// F) PRD v1.1 endpoint & signed portrait security checks
+$badSigPortrait = secReq("{$base}/backend/media.php?p=1&sig=deadbeef0000");
+check($badSigPortrait['code'] === 404, "media.php signed portrait rejects forged HMAC sig with 404 (got {$badSigPortrait['code']})");
+
+$qrRiwGet = secReq("{$base}/backend/api.php?action=qr.riwayat");
+check($qrRiwGet['code'] === 405, "qr.riwayat rejects GET requests with 405 (got {$qrRiwGet['code']})");
+
+$qrIzinGet = secReq("{$base}/backend/api.php?action=qr.izin");
+check($qrIzinGet['code'] === 405, "qr.izin rejects GET requests with 405 (got {$qrIzinGet['code']})");
+
+foreach (['karyawan.import', 'karyawan.delete', 'karyawan.revoke_qr', 'absensi.izin_approve'] as $admAct) {
+    $uRes = secReq("{$base}/backend/api.php?action={$admAct}", $ckKary, ['id' => 1], $csrfPub);
+    check($uRes['code'] === 401, "{$admAct} rejects unauthenticated POST with 401 (got {$uRes['code']})");
+}
+$auditUnauth = secReq("{$base}/backend/api.php?action=audit.list");
+check($auditUnauth['code'] === 401, "audit.list rejects unauthenticated GET with 401 (got {$auditUnauth['code']})");
+
 exit($failures > 0 ? 1 : 0);

@@ -46,6 +46,22 @@ const Api = (() => {
     return handle(res);
   }
 
+  function getDeviceId() {
+    let id = '';
+    try {
+      id = localStorage.getItem('ketik-device-id') || '';
+      if (!id) {
+        id = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : ('dev-' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36));
+        localStorage.setItem('ketik-device-id', id);
+      }
+    } catch (e) {
+      id = 'web-session';
+    }
+    return id;
+  }
+
   async function post(action, data, _retried = false) {
     await ensureCsrf();
     const res = await fetch(`${base}/api.php?action=${encodeURIComponent(action)}`, {
@@ -53,7 +69,8 @@ const Api = (() => {
       credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRF-Token': csrf || ''
+        'X-CSRF-Token': csrf || '',
+        'X-Device-Id': getDeviceId()
       },
       body: JSON.stringify(data || {})
     });

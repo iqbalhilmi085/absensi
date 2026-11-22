@@ -373,6 +373,27 @@ function migrate_schema(PDO $pdo): void
             'radius_masuk_m' => 'INT NOT NULL DEFAULT 0',
             'wajib_gps'      => DB_DRIVER === 'sqlite' ? 'INTEGER NOT NULL DEFAULT 0' : 'TINYINT(1) NOT NULL DEFAULT 0',
         ],
+        'divisi_jadwal' => [
+            'kode_unik'       => "VARCHAR(24) NOT NULL DEFAULT ''",
+            'warna_kartu'     => "VARCHAR(20) NOT NULL DEFAULT '#0A88C9'",
+            'toleransi_menit' => 'INT NOT NULL DEFAULT 15',
+            'aktif'           => DB_DRIVER === 'sqlite' ? 'INTEGER NOT NULL DEFAULT 1' : 'TINYINT(1) NOT NULL DEFAULT 1',
+        ],
+        'pengguna' => [
+            'no_hp'       => "VARCHAR(32) NOT NULL DEFAULT ''",
+            'foto'        => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'VARCHAR(190) NULL',
+            'tipe'        => "VARCHAR(20) NOT NULL DEFAULT 'karyawan'",
+            'kampus'      => "VARCHAR(150) NOT NULL DEFAULT ''",
+            'tgl_mulai'   => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'DATE NULL',
+            'tgl_selesai' => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'DATE NULL',
+        ],
+        'karyawan' => [
+            'status_kartu'    => "VARCHAR(20) NOT NULL DEFAULT 'aktif'",
+            'alasan_cabut'    => "VARCHAR(255) NOT NULL DEFAULT ''",
+            'diterbitkan_pada'=> DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'DATETIME NULL',
+            'dicabut_pada'    => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'DATETIME NULL',
+            'terakhir_dipakai'=> DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'DATETIME NULL',
+        ],
         'absensi' => [
             'lat_masuk'      => DB_DRIVER === 'sqlite' ? 'REAL NULL' : 'DECIMAL(10,7) NULL',
             'lng_masuk'      => DB_DRIVER === 'sqlite' ? 'REAL NULL' : 'DECIMAL(10,7) NULL',
@@ -387,6 +408,11 @@ function migrate_schema(PDO $pdo): void
             'shift_nama'        => "VARCHAR(100) NOT NULL DEFAULT ''",
             'jam_jadwal_masuk'  => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'CHAR(5) NULL',
             'jam_jadwal_pulang' => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'CHAR(5) NULL',
+            'device_hash'       => "VARCHAR(64) NOT NULL DEFAULT ''",
+            'anomali'           => "VARCHAR(255) NOT NULL DEFAULT ''",
+            'approval_status'   => "VARCHAR(20) NOT NULL DEFAULT 'disetujui'",
+            'diproses_oleh'     => 'INT NULL',
+            'jenis_izin'        => "VARCHAR(30) NOT NULL DEFAULT ''",
         ],
     ];
 

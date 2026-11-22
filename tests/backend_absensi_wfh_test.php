@@ -183,4 +183,59 @@ check(($rinaRow['mode'] ?? '') === 'wfh' && str_contains((string) ($rinaRow['keg
 $axelWfh = httpReq2("{$base}/backend/api.php?action=axel.dataset&dari={$today}&sampai={$today}&mode=wfh", $ckAdmin);
 check(count($axelWfh['json']['data'] ?? []) === 1 && ($axelWfh['json']['data'][0]['mode'] ?? '') === 'wfh', 'axel.dataset supports mode=wfh filter');
 
+// 7) 60-second double-scan guard + device multi_perangkat anomaly + member self-service riwayat & izin approval
+$emp3 = httpReq2("{$base}/backend/api.php?action=karyawan.save", $ckAdmin, [
+    'nama' => 'Magang Test 60s',
+    'email' => 'magang60@ketik.com',
+    'peran' => 'karyawan',
+    'tipe' => 'magang',
+    'kampus' => 'UB',
+    'tgl_mulai' => $today,
+    'tgl_selesai' => date('Y-m-d', strtotime('+60 days')),
+    'tim' => 'Redaksi',
+    'jabatan' => 'Magang Redaksi',
+    'aktif' => 1,
+], $csrfAdmin);
+$mQr = (string) ($emp3['json']['kode_qr'] ?? '');
+$mIn = httpReq2("{$base}/backend/api.php?action=qr.absen", $ckPub, [
+    'kode_qr' => $mQr,
+    'mode' => 'wfh',
+    'expected_state' => 'in',
+    'kegiatan' => 'Liputan lapangan pagi',
+], $csrfPub);
+check($mIn['code'] === 200 && ($mIn['json']['data']['tipe'] ?? '') === 'masuk', 'Magang QR checkin with expected_state=in succeeds');
+
+$mDup = httpReq2("{$base}/backend/api.php?action=qr.absen", $ckPub, [
+    'kode_qr' => $mQr,
+    'mode' => 'wfh',
+    'expected_state' => 'in',
+    'kegiatan' => 'Liputan lapangan pagi',
+], $csrfPub);
+check($mDup['code'] === 200 && ($mDup['json']['data']['tipe'] ?? '') === 'duplikat_diabaikan', '60s duplicate scan with expected_state=in returns duplikat_diabaikan');
+
+$anomCol = (string) $pdo->query("SELECT anomali FROM absensi WHERE pengguna_id = " . (int) $emp3['json']['id'] . " AND tanggal = '{$today}'")->fetchColumn();
+check(str_contains($anomCol, 'multi_perangkat'), "Same device checking in multiple cards triggers multi_perangkat anomaly (got: {$anomCol})");
+
+$mRiw = httpReq2("{$base}/backend/api.php?action=qr.riwayat", $ckPub, ['kode_qr' => $mQr], $csrfPub);
+check($mRiw['code'] === 200 && count($mRiw['json']['riwayat'] ?? []) >= 1, 'qr.riwayat returns own member attendance history without login');
+
+// Self-service leave request on tomorrow + Admin approve
+$tomorrow = date('Y-m-d', strtotime('+1 day'));
+$mIzin = httpReq2("{$base}/backend/api.php?action=qr.izin", $ckPub, [
+    'kode_qr' => $mQr,
+    'jenis' => 'dinas_luar',
+    'mulai' => $tomorrow,
+    'sampai' => $tomorrow,
+    'catatan' => 'Liputan luar kota Jakarta',
+], $csrfPub);
+check($mIzin['code'] === 200 && ($mIzin['json']['data']['approval_status'] ?? '') === 'menunggu', 'qr.izin submits dinas_luar with approval_status=menunggu');
+
+$izinList = httpReq2("{$base}/backend/api.php?action=absensi.izin_list", $ckAdmin);
+$pendingRow = array_values(array_filter($izinList['json']['data'] ?? [], fn($x) => ($x['approval_status'] ?? '') === 'menunggu'))[0] ?? null;
+$apv = httpReq2("{$base}/backend/api.php?action=absensi.izin_approve", $ckAdmin, ['id' => (int) ($pendingRow['id'] ?? 0), 'keputusan' => 'disetujui'], $csrfAdmin);
+check($apv['code'] === 200 && ($apv['json']['data']['approval_status'] ?? '') === 'disetujui', 'absensi.izin_approve approves pending leave request');
+
+$rekapMagang = httpReq2("{$base}/backend/api.php?action=rekap&dari={$today}&sampai={$today}&tipe=magang", $ckAdmin);
+check($rekapMagang['code'] === 200 && count($rekapMagang['json']['data'] ?? []) === 1 && ($rekapMagang['json']['data'][0]['kampus'] ?? '') === 'UB', 'rekap?tipe=magang returns filtered magang certificate fields');
+
 exit($failures > 0 ? 1 : 0);

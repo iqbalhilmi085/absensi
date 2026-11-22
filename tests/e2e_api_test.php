@@ -243,6 +243,25 @@ $inShift = e2eReq("{$base}/backend/api.php?action=qr.absen", $ckPub, [
 ], $csrfPub);
 check($inShift['code'] === 200 && ($inShift['json']['data']['shift_nama'] ?? '') === 'Shift Sore' && ($inShift['json']['data']['jam_jadwal_masuk'] ?? '') === '15:00', 'E2E: qr.absen saves chosen Shift Sore snapshot (15:00) cleanly without forced reason');
 
+// PRD v1.1 checks: division color/code/tolerance + qr.riwayat + audit.list
+$divMeta = array_values(array_filter($lkVideo['json']['shifts'] ?? [], fn() => false));
+$addDiv2 = e2eReq("{$base}/backend/api.php?action=divisi.save", $ckAdm, [
+    'nama' => 'Foto Redaksi',
+    'kode_unik' => 'FOT',
+    'warna_kartu' => '#059669',
+    'jam_masuk' => '09:30',
+    'jam_pulang' => '17:30',
+    'toleransi_menit' => 10,
+], $csrfAdm);
+$fotoDiv = array_values(array_filter($addDiv2['json']['data'] ?? [], fn($d) => ($d['nama'] ?? '') === 'Foto Redaksi'))[0] ?? null;
+check($addDiv2['code'] === 200 && ($fotoDiv['kode_unik'] ?? '') === 'FOT' && ($fotoDiv['warna_kartu'] ?? '') === '#059669' && (int) ($fotoDiv['toleransi_menit'] ?? 0) === 10, 'E2E: divisi.save persists kode_unik, warna_kartu, and toleransi_menit');
+
+$selfRiw = e2eReq("{$base}/backend/api.php?action=qr.riwayat", $ckPub, ['kode_qr' => $videoQr], $csrfPub);
+check($selfRiw['code'] === 200 && count($selfRiw['json']['riwayat'] ?? []) >= 1, 'E2E: qr.riwayat returns member own history');
+
+$audit = e2eReq("{$base}/backend/api.php?action=audit.list", $ckAdm);
+check($audit['code'] === 200 && count($audit['json']['data'] ?? []) >= 2, 'E2E: audit.list returns recorded admin actions');
+
 $kiosk = e2eReq("{$base}/backend/api.php?action=kiosk.info");
 check($kiosk['code'] === 410, 'E2E: kiosk.info returns 410');
 

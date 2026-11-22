@@ -179,4 +179,51 @@ check($rot['code'] === 200 && $dinaQrNew !== '' && $dinaQrNew !== $dinaQr, "kary
 $oldQrCheck = httpReq("{$base}/backend/api.php?action=qr.lookup", $cookiePub, ['kode_qr' => $dinaQr], $csrfPub);
 check($oldQrCheck['code'] === 404, "Old personal QR immediately fails after rotation (got {$oldQrCheck['code']})");
 
+// HMAC signature tampering rejection
+$tamperedQr = substr($dinaQrNew, 0, -4) . (substr($dinaQrNew, -4) === '0000' ? 'FFFF' : '0000');
+$tampCheck = httpReq("{$base}/backend/api.php?action=qr.lookup", $cookiePub, ['kode_qr' => $tamperedQr], $csrfPub);
+check($tampCheck['code'] === 404, "Tampered HMAC QR signature rejected with 404 (got {$tampCheck['code']})");
+
+// Revoke QR card -> 403
+$rev = httpReq("{$base}/backend/api.php?action=karyawan.revoke_qr", $cookieAdmin, ['id' => (int) ($dinaRow['id'] ?? 0), 'alasan' => 'Kartu hilang'], $csrfAdmin);
+check($rev['code'] === 200, "karyawan.revoke_qr succeeds (got {$rev['code']})");
+$revCheck = httpReq("{$base}/backend/api.php?action=qr.lookup", $cookiePub, ['kode_qr' => $dinaQrNew], $csrfPub);
+check($revCheck['code'] === 403, "Revoked QR card immediately rejected with 403 (got {$revCheck['code']})");
+
+// Magang auto-expiry
+$yesterday = date('Y-m-d', strtotime('-1 day'));
+$expAdd = httpReq("{$base}/backend/api.php?action=karyawan.save", $cookieAdmin, [
+    'nama' => 'Magang Lulus',
+    'email' => 'lulus@ketik.com',
+    'peran' => 'karyawan',
+    'tipe' => 'magang',
+    'kampus' => 'ITS',
+    'tgl_mulai' => date('Y-m-d', strtotime('-60 days')),
+    'tgl_selesai' => $yesterday,
+    'tim' => 'Desain',
+    'jabatan' => 'Desainer Magang',
+    'aktif' => 1,
+], $csrfAdmin);
+$expQr = (string) ($expAdd['json']['kode_qr'] ?? '');
+$expCheck = httpReq("{$base}/backend/api.php?action=qr.lookup", $cookiePub, ['kode_qr' => $expQr], $csrfPub);
+check($expCheck['code'] === 403, "Expired magang QR auto-deactivates and returns 403 (got {$expCheck['code']})");
+
+// Batch CSV import & Delete & Audit log
+$imp = httpReq("{$base}/backend/api.php?action=karyawan.import", $cookieAdmin, [
+    'rows' => [
+        ['nama' => 'Impor Satu', 'email' => 'imp1@ketik.com', 'no_hp' => '081111', 'tipe' => 'karyawan', 'tim' => 'Redaksi', 'jabatan' => 'Reporter'],
+        ['nama' => 'Impor Magang', 'email' => 'imp2@ketik.com', 'no_hp' => '082222', 'tipe' => 'magang', 'tim' => 'Desain', 'jabatan' => 'Magang', 'kampus' => 'UNAIR', 'tgl_mulai' => date('Y-m-d'), 'tgl_selesai' => date('Y-m-d', strtotime('+30 days'))],
+    ],
+], $csrfAdmin);
+check($imp['code'] === 200 && (int) ($imp['json']['data']['created'] ?? 0) === 2, "karyawan.import imports 2 members cleanly (got {$imp['code']})");
+
+$listAfter = httpReq("{$base}/backend/api.php?action=karyawan.list", $cookieAdmin);
+$imp1Row = array_values(array_filter($listAfter['json']['data'] ?? [], fn($r) => $r['email'] === 'imp1@ketik.com'))[0] ?? null;
+$delRes = httpReq("{$base}/backend/api.php?action=karyawan.delete", $cookieAdmin, ['id' => (int) ($imp1Row['id'] ?? 0)], $csrfAdmin);
+check($delRes['code'] === 200, "karyawan.delete removes imported employee cleanly");
+
+$auditRes = httpReq("{$base}/backend/api.php?action=audit.list", $cookieAdmin);
+$auditActions = array_column($auditRes['json']['data'] ?? [], 'aksi');
+check($auditRes['code'] === 200 && in_array('cabut_qr', $auditActions, true) && in_array('import_karyawan', $auditActions, true) && in_array('hapus_karyawan', $auditActions, true), 'audit.list records cabut_qr, import_karyawan, and hapus_karyawan');
+
 exit($failures > 0 ? 1 : 0);

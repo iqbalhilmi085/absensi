@@ -59,5 +59,8 @@ check(str_contains($appJs, 'e-qr-box') && str_contains($appJs, 'Simpan &amp; Mun
 check(str_contains($appJs, 'wa.me') && str_contains($appJs, 'mailto:') && str_contains($appJs, 'printAllQrCards'), 'app.js provides WhatsApp/Email sharing and batch print for Personal QR cards');
 check(str_contains($appJs, 'viewPantau') && str_contains($appJs, 'viewLaporan') && !str_contains($appJs, 'viewKmeans'), 'app.js streamlines admin menus and removes confusing K-Means view');
 check(!str_contains($appJs, "roles: ['karyawan']"), 'app.js scopes web dashboard strictly to admin role');
+check(str_contains($login, 'qr-self-tabs') && str_contains($login, "Api.post('qr.riwayat'") && str_contains($login, "Api.post('qr.izin'") && str_contains($login, 'expected_state'), 'login.html supports member self-service tabs (Riwayat Saya, Ajukan Izin) and 60s expected_state guard');
+check(str_contains($appJs, 'openImportModal') && str_contains($appJs, 'karyawan.revoke_qr') && str_contains($appJs, 'karyawan.delete') && str_contains($appJs, 'absensi.izin_approve') && str_contains($appJs, 'renderAuditSection') && str_contains($appJs, 'buildPrintableIdCardHtml'), 'app.js includes CSV import, card revocation, member deletion, izin approval, audit log, and 2-sided ID card print');
+check(!preg_match('/🌙|☀️|📍/u', $appJs), 'app.js remains free of emoji characters');
 
 exit($failures > 0 ? 1 : 0);

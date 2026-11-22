@@ -17,7 +17,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const byId = (id) => document.getElementById(id);
 
-  const STATUS_LABEL = { hadir: 'Hadir', terlambat: 'Terlambat', izin: 'Izin', sakit: 'Sakit', alpa: 'Tidak Masuk (Alpa)' };
+  const STATUS_LABEL = { hadir: 'Hadir', terlambat: 'Terlambat', izin: 'Izin', sakit: 'Sakit', dinas_luar: 'Dinas Luar', alpa: 'Tidak Masuk (Alpa)' };
   const PERAN_LABEL = { karyawan: 'Karyawan / Jurnalis / Magang (QR)', atasan: 'Redaktur / Supervisor', admin: 'Admin Ketik.com' };
   const HARI_NAMA = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -62,13 +62,43 @@
     return `<span class="shift-tag">${esc(m.toUpperCase())}</span>`;
   }
 
-  function empCell(nama) {
+  function empCell(nama, fotoUrl = '') {
     const clean = String(nama || '').trim();
+    if (fotoUrl) {
+      return `<span class="emp-cell"><img src="${esc(fotoUrl)}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid var(--panel-border)"><span style="font-weight:600">${esc(clean)}</span></span>`;
+    }
     const parts = clean.split(/\s+/).filter(Boolean);
     const initials = parts.length >= 2
       ? (parts[0][0] + parts[1][0]).toUpperCase()
       : (clean.slice(0, 2) || '?').toUpperCase();
     return `<span class="emp-cell"><span class="emp-initial">${esc(initials)}</span><span style="font-weight:600">${esc(clean)}</span></span>`;
+  }
+
+  function resizePhotoFile(file, maxDim = 720) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('File bukan gambar valid.'));
+        img.onload = () => {
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', 0.85));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function getDivMeta(timName) {
+    const low = String(timName || '').trim().toLowerCase();
+    return (state.divisiJadwal || []).find((d) => String(d.nama || '').trim().toLowerCase() === low) || null;
   }
 
   function parseCatatanBukti(row) {
@@ -350,6 +380,8 @@
               <button class="btn btn-sm hero-btn-light" id="dash-go-harian">${ico('clock', 15)} Pantau Absen</button>
               <button class="btn btn-sm hero-btn-glass" id="dash-go-karyawan">${ico('qr', 15)} Kirim QR Karyawan</button>
               <button class="btn btn-sm hero-btn-glass" id="dash-go-laporan">${ico('db', 15)} Laporan &amp; Ekspor</button>
+              ${Number(h.izin_menunggu || 0) > 0 ? `<button class="btn btn-sm hero-btn-glass" id="dash-go-izin">${ico('cal', 15)} ${Number(h.izin_menunggu)} Izin Menunggu</button>` : ''}
+              ${Number(h.anomali || 0) > 0 ? `<button class="btn btn-sm hero-btn-glass" id="dash-go-anomali">${ico('alert', 15)} ${Number(h.anomali)} Anomali Hari Ini</button>` : ''}
             </div>
           </div>
           <div class="hero-split-box">
@@ -394,7 +426,7 @@
             </div>
             <div class="value">${jmlIzinSakit} <span style="font-size:13.5px;font-weight:500;color:var(--text-muted)">orang</span></div>
             <div class="metric-bar"><span style="width:${pctOf(jmlIzinSakit)}%"></span></div>
-            <div class="sublabel">Izin: ${h.izin || 0} · Sakit: ${h.sakit || 0}</div>
+            <div class="sublabel">Izin: ${h.izin || 0} · Sakit: ${h.sakit || 0}${Number(h.izin_menunggu || 0) > 0 ? ` · Menunggu: ${h.izin_menunggu}` : ''}</div>
           </div>
           <div class="glass card metric accent-alpa">
             <div class="metric-top">
@@ -605,6 +637,7 @@
     renderTrendChart();
 
     byId('dash-go-harian')?.addEventListener('click', () => go('harian'));
+    byId('dash-go-anomali')?.addEventListener('click', () => go('harian'));
     byId('dash-go-karyawan')?.addEventListener('click', () => go('karyawan'));
     byId('dash-go-izin')?.addEventListener('click', () => go('izin'));
     byId('dash-go-laporan')?.addEventListener('click', () => go('axel'));
@@ -686,11 +719,16 @@
             <td class="muted tabular">${idx + 1}</td>
             <td>
               <div class="cell-stack">
-                ${empCell(r.nama)}
-                <span class="cell-sub">${esc(r.tim)}</span>
+                ${empCell(r.nama, r.foto_url || '')}
+                <span class="cell-sub">${esc(r.tim)}${r.tipe === 'magang' ? ' · <span class="badge badge-izin" style="font-size:10.5px;padding:1px 6px">Magang</span>' : ''}</span>
               </div>
             </td>
-            <td>${r.status ? badge(r.status) : '<span class="badge badge-netral">Belum Absen</span>'}</td>
+            <td>
+              <div class="cell-stack">
+                ${r.status ? badge(r.status) : '<span class="badge badge-netral">Belum Absen</span>'}
+                ${r.anomali ? `<span class="badge badge-terlambat" style="font-size:10.5px;margin-top:3px" title="Indikator Anomali">${esc(r.anomali)}</span>` : ''}
+              </div>
+            </td>
             <td class="tabular">
               <div class="cell-stack">
                 <span>Masuk: <b>${fmtJam(r.jam_masuk)}</b></span>
@@ -772,12 +810,13 @@
 
   // ---------------- Laporan & Rekap (Riwayat Ekspor + Rekap Bulanan) ----------------
   async function viewLaporan(view, activeTab = 'riwayat') {
-    const tab = activeTab === 'rekap' ? 'rekap' : 'riwayat';
+    const tab = activeTab === 'rekap' ? 'rekap' : activeTab === 'audit' ? 'audit' : 'riwayat';
     view.innerHTML = `
-      ${pageHead('Laporan & Rekap Kehadiran', 'Lihat riwayat absen lengkap, rekap bulanan per karyawan, dan ekspor PDF/Excel/CSV', `
+      ${pageHead('Laporan & Rekap Kehadiran', 'Lihat riwayat absen lengkap, rekap bulanan per karyawan/magang, log audit, dan ekspor Excel/CSV/PDF', `
         <div class="sub-tabs" role="tablist">
           <button type="button" class="sub-tab ${tab === 'riwayat' ? 'active' : ''}" data-ltab="riwayat">${ico('db', 15)} Riwayat &amp; Ekspor</button>
           <button type="button" class="sub-tab ${tab === 'rekap' ? 'active' : ''}" data-ltab="rekap">${ico('chart', 15)} Rekap Bulanan</button>
+          <button type="button" class="sub-tab ${tab === 'audit' ? 'active' : ''}" data-ltab="audit">${ico('alert', 15)} Log Audit</button>
         </div>`)}
       <div id="laporan-body"></div>`;
 
@@ -791,8 +830,31 @@
     const body = byId('laporan-body');
     if (tab === 'rekap') {
       await renderRekapSection(body);
+    } else if (tab === 'audit') {
+      await renderAuditSection(body);
     } else {
       await renderRiwayatSection(body);
+    }
+  }
+
+  async function renderAuditSection(container) {
+    container.innerHTML = `<div class="glass card"><div class="card-head"><h2>Log Audit Aktivitas Admin</h2><span class="pill-note" id="audit-cnt">Memuat…</span></div><div id="audit-wrap"><p class="muted small">Memuat log audit…</p></div></div>`;
+    try {
+      const { data } = await Api.get('audit.list');
+      const rows = data || [];
+      byId('audit-cnt').textContent = `${rows.length} catatan`;
+      byId('audit-wrap').innerHTML = rows.length ? `
+        <div class="table-wrap"><table>
+          <thead><tr><th>Waktu</th><th>Aktor</th><th>Aksi</th><th>Detail Perubahan</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr>
+            <td class="tabular small muted">${esc(r.dibuat_pada || '—')}</td>
+            <td style="font-weight:600">${esc(r.aktor_nama || 'Sistem')}</td>
+            <td><span class="shift-tag">${esc(r.aksi)}</span></td>
+            <td class="wrap small">${esc(r.detail || '—')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="muted small">Belum ada log aktivitas tercatat.</p>';
+    } catch (e) {
+      byId('audit-wrap').innerHTML = `<p class="muted small">${esc(e.message)}</p>`;
     }
   }
 
@@ -806,6 +868,7 @@
             <label class="field"><span>Dari Tanggal</span><input type="date" id="r-dari" value="${firstOfMonthISO()}"></label>
             <label class="field"><span>Sampai Tanggal</span><input type="date" id="r-sampai" value="${endOfMonthISO()}"></label>
             <label class="field"><span>Divisi</span><select id="r-tim"><option value="">Semua Divisi</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
+            <label class="field"><span>Tipe Anggota</span><select id="r-tipe"><option value="">Semua (Karyawan &amp; Magang)</option><option value="karyawan">Karyawan Tetap</option><option value="magang">Peserta Magang</option></select></label>
           </div>
           <div class="filter-actions">
             <button class="btn btn-primary btn-sm" id="r-load">Tampilkan Rekap</button>
@@ -820,8 +883,21 @@
 
     let rows = [];
     function columnsData() {
-      const cols = ['No', 'Nama Karyawan', 'Divisi', 'Jumlah Hari Masuk', 'Tidak Masuk', 'Total Hari Kerja', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja'];
-      const data = rows.map((r, i) => [i + 1, r.nama, r.tim, r.hari_tercatat, r.hari_tidak_hadir, r.total_hari, r.rata_terlambat, r.persen_tidak_hadir + '%', r.rata_jam_kerja + ' jam']);
+      const cols = ['No', 'Nama Karyawan', 'Tipe', 'Divisi', 'Kampus / Periode', 'Jumlah Hari Masuk', 'Tidak Masuk', 'Total Hari Kerja', '% Kehadiran', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja'];
+      const data = rows.map((r, i) => [
+        i + 1,
+        r.nama,
+        r.tipe === 'magang' ? 'Magang' : 'Karyawan',
+        r.tim,
+        r.tipe === 'magang' ? `${r.kampus || '-'} (${r.tgl_mulai || '-'} s/d ${r.tgl_selesai || '-'})` : '-',
+        r.hari_tercatat,
+        r.hari_tidak_hadir,
+        r.total_hari,
+        (r.persen_hadir ?? 0) + '%',
+        r.rata_terlambat,
+        r.persen_tidak_hadir + '%',
+        r.rata_jam_kerja + ' jam'
+      ]);
       return { cols, data };
     }
 
@@ -835,7 +911,7 @@
       const box = byId('r-box');
       try {
         const { data } = await Api.get('rekap', {
-          dari, sampai, tim: byId('r-tim').value
+          dari, sampai, tim: byId('r-tim').value, tipe: byId('r-tipe').value
         });
         rows = data;
       } catch (e) {
@@ -848,12 +924,12 @@
 
       box.innerHTML = `
         <div class="card-head">
-          <h2>Hasil Rekap Kehadiran Karyawan</h2>
-          <span class="pill-note">${rows.length} karyawan</span>
+          <h2>${byId('r-tipe').value === 'magang' ? 'Rekap Khusus Peserta Magang (Penilaian / Sertifikat)' : 'Hasil Rekap Kehadiran Anggota'}</h2>
+          <span class="pill-note">${rows.length} anggota</span>
         </div>
         <div class="trend-summary-strip">
           <div class="trend-stat-box">
-            <div class="ts-label">Jumlah Karyawan</div>
+            <div class="ts-label">Jumlah Anggota</div>
             <div class="ts-val">${rows.length} orang</div>
           </div>
           <div class="trend-stat-box">
@@ -873,23 +949,23 @@
           <thead>
             <tr>
               <th>No</th>
-              <th>Karyawan &amp; Divisi</th>
+              <th>Anggota &amp; Divisi</th>
               <th>Jumlah Masuk</th>
+              <th>% Hadir</th>
               <th>Tidak Masuk</th>
               <th>Rata Terlambat</th>
-              <th>% Tidak Masuk</th>
               <th>Lama Kerja</th>
             </tr>
           </thead>
           <tbody>${rows.map((r, i) => `<tr>
             <td class="muted tabular">${i + 1}</td>
-            <td><div class="cell-stack">${empCell(r.nama)}<span class="cell-sub">${esc(r.tim)}</span></div></td>
+            <td><div class="cell-stack">${empCell(r.nama)}<span class="cell-sub">${esc(r.tim)}${r.tipe === 'magang' ? ` · Magang${r.kampus ? ' (' + esc(r.kampus) + ')' : ''}` : ''}</span></div></td>
             <td class="tabular"><span class="badge badge-hadir">${r.hari_tercatat} hari</span></td>
+            <td class="tabular"><b>${r.persen_hadir ?? Math.max(0, 100 - Number(r.persen_tidak_hadir || 0))}%</b></td>
             <td class="tabular">${r.hari_tidak_hadir} hari</td>
             <td class="tabular">${r.rata_terlambat} menit</td>
-            <td class="tabular">${r.persen_tidak_hadir}%</td>
             <td class="tabular">${r.rata_jam_kerja} jam/hari</td>
-          </tr>`).join('') || '<tr><td colspan="7" class="muted">Tidak ada data pada tanggal yang dipilih.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="7" class="muted">Tidak ada data pada filter yang dipilih.</td></tr>'}</tbody>
         </table></div>`;
     }
     byId('r-load').addEventListener('click', load);
@@ -1281,12 +1357,15 @@
             <p class="muted small">Jam masuk karyawan otomatis mengikuti divisinya. Jika bertukar shift, karyawan cukup memilih dari daftar shift saat scan QR.</p>
 
             <div class="config-section">
-              <div class="config-section-title"><span class="step-num">A</span> Jadwal Jam per Divisi</div>
+              <div class="config-section-title"><span class="step-num">A</span> Jadwal &amp; Desain Kartu per Divisi</div>
               <div id="divisi-jadwal-list" class="stack" style="gap:8px"></div>
-              <form id="div-add-form" class="filter-grid" style="grid-template-columns:1.5fr 1fr 1fr auto;gap:8px">
+              <form id="div-add-form" class="filter-grid" style="grid-template-columns:1.3fr .7fr .8fr .8fr .7fr auto auto;gap:8px;align-items:center">
                 <input id="div-nama" placeholder="Nama divisi (mis. Magang)" required>
+                <input id="div-kode" placeholder="Kode (RED)" maxlength="12" title="Kode unik divisi">
                 <input type="time" id="div-masuk" value="09:00" required title="Jam masuk">
                 <input type="time" id="div-pulang" value="17:00" required title="Jam pulang">
+                <input type="number" id="div-tol" value="15" min="0" max="120" title="Toleransi telat (menit)" placeholder="Telat (m)">
+                <input type="color" id="div-warna" value="#0A88C9" title="Warna ID Card divisi" style="width:38px;height:36px;padding:2px;border-radius:8px">
                 <button type="submit" class="btn btn-primary btn-sm">+ Divisi</button>
               </form>
             </div>
@@ -1310,9 +1389,12 @@
       if (divEl) {
         divEl.innerHTML = (state.divisiJadwal || []).map((d) => `
           <div class="mode-breakdown-row" style="padding:8px 12px">
-            <div>
-              <div style="font-weight:600;font-size:13px">${esc(d.nama)}</div>
-              <div class="cell-sub tabular">${esc(d.jam_masuk)} – ${esc(d.jam_pulang)} WIB</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="width:12px;height:28px;border-radius:4px;background:${esc(d.warna_kartu || '#0A88C9')};display:inline-block"></span>
+              <div>
+                <div style="font-weight:600;font-size:13px">${esc(d.nama)} ${d.kode_unik ? `<span class="shift-tag" style="margin-left:4px">${esc(d.kode_unik)}</span>` : ''}</div>
+                <div class="cell-sub tabular">${esc(d.jam_masuk)} – ${esc(d.jam_pulang)} WIB · Toleransi ${Number(d.toleransi_menit ?? state.org.toleransi_menit ?? 15)} mnt</div>
+              </div>
             </div>
             <button type="button" class="btn btn-ghost btn-sm" data-del-div="${d.id}">Hapus</button>
           </div>`).join('') || '<p class="muted small">Belum ada jadwal divisi khusus (menggunakan jam kantor default).</p>';
@@ -1357,13 +1439,17 @@
       try {
         const res = await Api.post('divisi.save', {
           nama: byId('div-nama').value.trim(),
+          kode_unik: (byId('div-kode')?.value || '').trim().toUpperCase(),
+          warna_kartu: byId('div-warna')?.value || '#0A88C9',
           jam_masuk: byId('div-masuk').value,
-          jam_pulang: byId('div-pulang').value
+          jam_pulang: byId('div-pulang').value,
+          toleransi_menit: Number(byId('div-tol')?.value ?? 15)
         });
         state.divisiJadwal = res.data || [];
         byId('div-nama').value = '';
+        if (byId('div-kode')) byId('div-kode').value = '';
         renderScheduleLists();
-        toast('Jadwal divisi disimpan');
+        toast('Jadwal & desain divisi disimpan');
       } catch (err) { toast(err.message, 'err'); }
     });
 
@@ -1463,23 +1549,37 @@
 
   async function viewKaryawan(view) {
     view.innerHTML = `
-      ${pageHead('Karyawan & QR Pribadi', 'Setiap karyawan otomatis mendapat QR unik pribadi. Admin dapat langsung mengirim, mengunduh, atau mencetak kartu QR.', `
+      ${pageHead('Anggota & ID Card QR', 'Setiap anggota otomatis mendapat ID card QR unik bertanda tangan. Admin dapat mengirim, mencabut, mengimpor massal, atau mencetak kartu QR.', `
+        <button class="btn btn-secondary" id="import-emp">${ico('db', 15)} Impor CSV</button>
         <button class="btn btn-secondary" id="print-all-qr">${ico('qr', 15)} Cetak Semua Kartu QR</button>
-        <button class="btn btn-primary" id="add-emp">+ Tambah Karyawan</button>`)}
+        <button class="btn btn-primary" id="add-emp">+ Tambah Anggota</button>`)}
       <div class="glass card" id="emp-box"><p class="muted">Sedang memuat data…</p></div>`;
 
     let allEmployees = [];
 
+    function renderCardStatusBadge(u) {
+      if (u.peran !== 'karyawan' || !u.kode_qr) return '<span class="muted small">Khusus Admin</span>';
+      const st = u.status_kartu || (Number(u.aktif) ? 'aktif' : 'kedaluwarsa');
+      const cls = st === 'aktif' ? 'badge-hadir' : (st === 'dicabut' ? 'badge-alpa' : 'badge-terlambat');
+      const lbl = st === 'aktif' ? 'Aktif' : (st === 'dicabut' ? 'Dicabut' : 'Kedaluwarsa');
+      const last = u.terakhir_dipakai ? `<span class="cell-sub">Dipakai: ${esc(String(u.terakhir_dipakai).slice(0, 16))}</span>` : '';
+      return `<div class="cell-stack"><span class="badge ${cls}" style="width:fit-content">${lbl}</span><span class="qr-code-pill" style="margin-top:4px">${esc(u.kode_qr)}</span>${last}</div>`;
+    }
+
     function renderEmpTable() {
       const q = (byId('emp-search')?.value || '').trim().toLowerCase();
-      const rows = q
-        ? allEmployees.filter((u) =>
-            (u.nama || '').toLowerCase().includes(q) ||
-            (u.email || '').toLowerCase().includes(q) ||
-            (u.tim || '').toLowerCase().includes(q) ||
-            (u.jabatan || '').toLowerCase().includes(q) ||
-            (u.kode_qr || '').toLowerCase().includes(q))
-        : allEmployees;
+      const tFilter = byId('emp-tipe')?.value || '';
+      const rows = allEmployees.filter((u) => {
+        if (tFilter && (u.tipe || 'karyawan') !== tFilter) return false;
+        if (!q) return true;
+        return (u.nama || '').toLowerCase().includes(q) ||
+          (u.email || '').toLowerCase().includes(q) ||
+          (u.no_hp || '').toLowerCase().includes(q) ||
+          (u.tim || '').toLowerCase().includes(q) ||
+          (u.jabatan || '').toLowerCase().includes(q) ||
+          (u.kampus || '').toLowerCase().includes(q) ||
+          (u.kode_qr || '').toLowerCase().includes(q);
+      });
 
       const tbody = byId('emp-tbody');
       if (tbody) {
@@ -1487,27 +1587,28 @@
           <td class="muted tabular">${idx + 1}</td>
           <td>
             <div class="cell-stack">
-              ${empCell(u.nama)}
-              <span class="cell-sub">${esc(u.email)}</span>
+              ${empCell(u.nama, u.foto_url || '')}
+              <span class="cell-sub">${esc(u.email)}${u.no_hp ? ' · ' + esc(u.no_hp) : ''}</span>
             </div>
           </td>
           <td>
             <div class="cell-stack">
               <span class="shift-tag" style="width:fit-content">${esc(u.tim)}</span>
-              <span class="cell-sub">${esc(u.jabatan || 'Staf')}</span>
+              <span class="cell-sub">${esc(u.jabatan || 'Staf')}${u.tipe === 'magang' ? ` · <b>Magang</b>${u.tgl_selesai ? ' (s/d ' + esc(u.tgl_selesai) + ')' : ''}` : ''}</span>
             </div>
           </td>
           <td>${PERAN_LABEL[u.peran] || esc(u.peran)}</td>
-          <td>${u.peran === 'karyawan' && u.kode_qr ? `<span class="qr-code-pill">${esc(u.kode_qr)}</span>` : '<span class="muted small">Khusus Admin</span>'}</td>
+          <td>${renderCardStatusBadge(u)}</td>
           <td>${Number(u.aktif) ? '<span class="badge badge-hadir">Aktif</span>' : '<span class="badge badge-netral">Nonaktif</span>'}</td>
           <td>
             <div class="row-actions">
-              ${u.peran === 'karyawan' && u.kode_qr ? `<button class="btn btn-primary btn-sm" data-qr='${esc(JSON.stringify(u))}'>${ico('qr', 14)} Kirim QR</button>` : ''}
+              ${u.peran === 'karyawan' && u.kode_qr ? `<button class="btn btn-primary btn-sm" data-qr='${esc(JSON.stringify(u))}'>${ico('qr', 14)} Kartu QR</button>` : ''}
               <button class="btn btn-secondary btn-sm" data-edit='${esc(JSON.stringify(u))}'>Ubah</button>
               ${u.id !== state.user.id ? `<button class="btn btn-ghost btn-sm" data-toggle="${u.id}" data-aktif="${Number(u.aktif) ? 0 : 1}">${Number(u.aktif) ? 'Nonaktif' : 'Aktifkan'}</button>` : ''}
+              ${u.id !== state.user.id ? `<button class="btn btn-ghost btn-sm" data-del="${u.id}" data-nama="${esc(u.nama)}">Hapus</button>` : ''}
             </div>
           </td>
-        </tr>`).join('') || '<tr><td colspan="7" class="muted">Tidak ada karyawan sesuai pencarian.</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="7" class="muted">Tidak ada anggota sesuai pencarian atau filter.</td></tr>';
         tbody.querySelectorAll('[data-qr]').forEach((b) =>
           b.addEventListener('click', () => openQrCard(JSON.parse(b.dataset.qr), load)));
         tbody.querySelectorAll('[data-edit]').forEach((b) =>
@@ -1516,21 +1617,35 @@
           b.addEventListener('click', async () => {
             try {
               await Api.post('karyawan.toggle', { id: Number(b.dataset.toggle), aktif: Number(b.dataset.aktif) });
-              toast('Status karyawan berhasil diubah'); load();
+              toast('Status anggota berhasil diubah'); load();
+            } catch (e) { toast(e.message, 'err'); }
+          }));
+        tbody.querySelectorAll('[data-del]').forEach((b) =>
+          b.addEventListener('click', async () => {
+            if (!window.confirm(`Hapus anggota "${b.dataset.nama}" beserta riwayat absensinya? Tindakan ini tidak dapat dibatalkan.`)) return;
+            try {
+              await Api.post('karyawan.delete', { id: Number(b.dataset.del) });
+              toast('Anggota berhasil dihapus'); load();
             } catch (e) { toast(e.message, 'err'); }
           }));
         return;
       }
 
-      const activeQrCount = allEmployees.filter((u) => u.peran === 'karyawan' && u.kode_qr && Number(u.aktif) === 1).length;
+      const activeQrCount = allEmployees.filter((u) => u.peran === 'karyawan' && u.kode_qr && Number(u.aktif) === 1 && (u.status_kartu || 'aktif') === 'aktif').length;
+      const magangCount = allEmployees.filter((u) => u.peran === 'karyawan' && u.tipe === 'magang').length;
       byId('emp-box').innerHTML = `
         <div class="card-head" style="flex-wrap:wrap">
           <div>
-            <h2>Semua Karyawan &amp; Akun Admin</h2>
-            <p class="muted small">${activeQrCount} karyawan aktif sudah memiliki QR pribadi otomatis</p>
+            <h2>Semua Karyawan, Magang &amp; Akun Admin</h2>
+            <p class="muted small">${activeQrCount} kartu QR aktif · ${magangCount} peserta magang</p>
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <input type="search" id="emp-search" placeholder="Cari nama, divisi, atau kode QR…" style="min-height:36px;width:250px">
+            <select id="emp-tipe" style="min-height:36px;width:155px">
+              <option value="">Semua Tipe</option>
+              <option value="karyawan">Karyawan</option>
+              <option value="magang">Peserta Magang</option>
+            </select>
+            <input type="search" id="emp-search" placeholder="Cari nama, divisi, kampus, atau QR…" style="min-height:36px;width:230px">
             <span class="pill-note">${allEmployees.length} akun</span>
           </div>
         </div>
@@ -1538,17 +1653,18 @@
           <thead>
             <tr>
               <th>No</th>
-              <th>Karyawan &amp; Email</th>
-              <th>Divisi &amp; Jabatan</th>
+              <th>Anggota &amp; Kontak</th>
+              <th>Divisi &amp; Tipe</th>
               <th>Peran</th>
-              <th>QR Pribadi</th>
-              <th>Status</th>
+              <th>Status Kartu &amp; QR</th>
+              <th>Akun</th>
               <th>Aksi</th>
             </tr>
           </thead>
           <tbody id="emp-tbody"></tbody>
         </table></div>`;
       byId('emp-search').addEventListener('input', renderEmpTable);
+      byId('emp-tipe').addEventListener('change', renderEmpTable);
       renderEmpTable();
     }
 
@@ -1560,14 +1676,110 @@
       return allEmployees;
     }
     byId('add-emp').addEventListener('click', () => openEmpForm(null, load));
+    byId('import-emp').addEventListener('click', () => openImportModal(load));
     byId('print-all-qr').addEventListener('click', () => printAllQrCards(allEmployees));
     await load();
   }
 
+  function openImportModal(reload) {
+    const m = openModal(`
+      <div class="modal-head"><h2>Impor Anggota Massal (CSV)</h2><button class="icon-btn" type="button" data-close>×</button></div>
+      <div class="form">
+        <p class="muted small">Format kolom CSV (urutan bebas dengan header): <code>nama,email,no_hp,tipe,tim,jabatan,kampus,tgl_mulai,tgl_selesai</code>. Kolom <code>tipe</code> isi <code>karyawan</code> atau <code>magang</code>.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-secondary btn-sm" id="imp-dl-tpl">Unduh Template CSV</button>
+          <input type="file" id="imp-file" accept=".csv,.txt">
+        </div>
+        <label class="field">
+          <span>Atau Tempel Isi CSV / Excel (Tab/Koma)</span>
+          <textarea id="imp-text" rows="6" placeholder="nama,email,no_hp,tipe,tim,jabatan,kampus,tgl_mulai,tgl_selesai&#10;Rina S,rina@ketik.com,0812345678,magang,Redaksi,Reporter Magang,UNAIR,2026-11-01,2027-02-01"></textarea>
+        </label>
+        <div id="imp-err" class="alert alert-error" hidden></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button type="button" class="btn btn-secondary" data-close-btn>Batal</button>
+          <button type="button" class="btn btn-primary" id="imp-run">Impor &amp; Buat QR</button>
+        </div>
+      </div>`);
+    m.$('[data-close]').addEventListener('click', m.close);
+    m.$('[data-close-btn]').addEventListener('click', m.close);
+    m.$('#imp-dl-tpl').addEventListener('click', () => {
+      const csv = 'nama,email,no_hp,tipe,tim,jabatan,kampus,tgl_mulai,tgl_selesai\nContoh Karyawan,contoh@ketik.com,08123456789,karyawan,Redaksi,Jurnalis,,,\nContoh Magang,magang@ketik.com,08987654321,magang,Desain,Desainer Magang,ITS Surabaya,2026-11-01,2027-02-28\n';
+      downloadBlob('template-anggota-ketik.csv', csv, 'text/csv;charset=utf-8;');
+    });
+    m.$('#imp-file').addEventListener('change', async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      m.$('#imp-text').value = await f.text();
+    });
+    m.$('#imp-run').addEventListener('click', async () => {
+      const errBox = m.$('#imp-err'); errBox.hidden = true;
+      const raw = (m.$('#imp-text').value || '').trim();
+      if (!raw) { errBox.textContent = 'Tempel atau pilih file CSV terlebih dahulu.'; errBox.hidden = false; return; }
+      const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (!lines.length) { errBox.textContent = 'Data CSV kosong.'; errBox.hidden = false; return; }
+      const sep = lines[0].includes('\t') ? '\t' : (lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',');
+      const splitLine = (l) => l.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''));
+      let headers = splitLine(lines[0]).map((h) => h.toLowerCase());
+      let startIdx = 1;
+      if (!headers.includes('email') && !headers.includes('nama')) {
+        headers = ['nama', 'email', 'no_hp', 'tipe', 'tim', 'jabatan', 'kampus', 'tgl_mulai', 'tgl_selesai'];
+        startIdx = 0;
+      }
+      const rows = [];
+      for (let i = startIdx; i < lines.length; i++) {
+        const vals = splitLine(lines[i]);
+        const obj = {};
+        headers.forEach((h, idx) => { obj[h] = vals[idx] || ''; });
+        if (obj.nama || obj.email) rows.push(obj);
+      }
+      if (!rows.length) { errBox.textContent = 'Tidak ada baris anggota yang terbaca.'; errBox.hidden = false; return; }
+      try {
+        const res = await Api.post('karyawan.import', { rows });
+        const d = res.data || {};
+        toast(`Impor selesai: ${d.created || 0} ditambahkan, ${d.skipped || 0} dilewati`);
+        m.close();
+        reload();
+      } catch (err) {
+        errBox.textContent = err.message || 'Gagal mengimpor data.';
+        errBox.hidden = false;
+      }
+    });
+  }
+
+  function buildPrintableIdCardHtml(u, svg) {
+    const dm = getDivMeta(u.tim);
+    const accent = dm?.warna_kartu || '#0A88C9';
+    const tipeLbl = u.tipe === 'magang' ? 'PESERTA MAGANG' : 'KARYAWAN';
+    const validLbl = u.tipe === 'magang' && u.tgl_selesai ? `Berlaku s/d ${esc(u.tgl_selesai)}` : 'Aktif';
+    const fotoHtml = u.foto_url
+      ? `<img src="${esc(u.foto_url)}" alt="${esc(u.nama)}" style="width:74px;height:74px;border-radius:14px;object-fit:cover;border:2px solid ${esc(accent)};margin:0 auto 8px;display:block">`
+      : `<div style="width:74px;height:74px;border-radius:14px;background:${esc(accent)}18;color:${esc(accent)};font-weight:700;font-size:24px;display:grid;place-items:center;margin:0 auto 8px;border:2px solid ${esc(accent)}">${esc((u.nama || '?').slice(0, 2).toUpperCase())}</div>`;
+    return `<div class="pair">
+      <div class="card">
+        <div class="head" style="background:${esc(accent)}">KETIK.COM · ${tipeLbl}</div>
+        <div class="body">
+          ${fotoHtml}
+          <div class="name">${esc(u.nama)}</div>
+          <div class="meta">${esc(u.tim)}${dm?.kode_unik ? ' (' + esc(dm.kode_unik) + ')' : ''}${u.jabatan ? ' · ' + esc(u.jabatan) : ''}</div>
+          ${u.tipe === 'magang' && u.kampus ? `<div class="meta">${esc(u.kampus)}</div>` : ''}
+          <div class="badge-valid">${validLbl}</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="head" style="background:#0B1E33">SCAN PRESENSI TANPA LOGIN</div>
+        <div class="body">
+          <div class="qr">${svg}</div>
+          <div class="code">${esc(u.kode_qr)}</div>
+          <div class="meta" style="margin-top:6px">Scan QR di portal ketik.com untuk absen masuk/pulang atau ajukan izin.</div>
+        </div>
+      </div>
+    </div>`;
+  }
+
   function printAllQrCards(employees) {
-    const list = (employees || []).filter((u) => u.peran === 'karyawan' && u.kode_qr && Number(u.aktif) === 1);
-    if (!list.length) { toast('Belum ada karyawan aktif dengan QR pribadi', 'err'); return; }
-    const win = window.open('', '_blank', 'width=900,height=740');
+    const list = (employees || []).filter((u) => u.peran === 'karyawan' && u.kode_qr && Number(u.aktif) === 1 && (u.status_kartu || 'aktif') === 'aktif');
+    if (!list.length) { toast('Belum ada anggota aktif dengan kartu QR aktif', 'err'); return; }
+    const win = window.open('', '_blank', 'width=960,height=760');
     if (!win) { toast('Izinkan pop-up browser untuk mencetak semua kartu QR', 'err'); return; }
     const cardsHtml = list.map((u) => {
       let svg = '';
@@ -1577,41 +1789,55 @@
         qr.make();
         svg = qr.createSvgTag(4, 5);
       } catch (e) {}
-      return `<div class="card"><div class="head">KETIK.COM · KARTU PRESENSI</div>
-        <div class="body"><div class="qr">${svg}</div><div class="name">${esc(u.nama)}</div>
-        <div class="meta">${esc(u.tim)}${u.jabatan ? ' · ' + esc(u.jabatan) : ''}</div>
-        <div class="code">${esc(u.kode_qr)}</div></div></div>`;
+      return buildPrintableIdCardHtml(u, svg);
     }).join('');
-    win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Cetak Semua Kartu QR · Ketik.com</title>
+    win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Cetak Semua ID Card QR · Ketik.com</title>
       <style>body{font-family:sans-serif;padding:20px;color:#0f172a}
       h2{text-align:center;margin:0 0 16px;color:#0B1E33}
-      .grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:16px}
-      .card{border:2px solid #0A88C9;border-radius:12px;overflow:hidden;text-align:center;break-inside:avoid}
-      .head{background:#0A88C9;border-bottom:4px solid #3ABCA5;color:#fff;padding:10px;font-weight:700;font-size:12px;letter-spacing:0.05em}
-      .body{padding:16px}.qr svg{width:170px;height:170px}.name{font-size:16px;font-weight:700;margin-top:8px}
-      .meta{color:#475569;font-size:12px;margin-top:2px}.code{margin-top:10px;font-family:monospace;font-size:12px;font-weight:700;color:#0A88C9}</style>
-      </head><body><h2>Daftar Kartu QR Karyawan · PT Ketik Media Siber</h2><div class="grid">${cardsHtml}</div>
+      .grid{display:grid;grid-template-columns:1fr;gap:18px;max-width:740px;margin:0 auto}
+      .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;break-inside:avoid}
+      .card{border:2px solid #cbd5e1;border-radius:12px;overflow:hidden;text-align:center;display:flex;flex-direction:column}
+      .head{border-bottom:4px solid #3ABCA5;color:#fff;padding:10px;font-weight:700;font-size:11.5px;letter-spacing:0.05em}
+      .body{padding:16px;flex:1;display:flex;flex-direction:column;justify-content:center}.qr svg{width:140px;height:140px}.name{font-size:16px;font-weight:700;margin-top:4px}
+      .meta{color:#475569;font-size:11.5px;margin-top:3px}.badge-valid{margin-top:8px;font-size:11px;font-weight:700;color:#0f766e}
+      .code{margin-top:6px;font-family:monospace;font-size:11px;font-weight:700;color:#0A88C9}</style>
+      </head><body><h2>ID Card QR Anggota (Depan &amp; Belakang) · PT Ketik Media Siber</h2><div class="grid">${cardsHtml}</div>
       <script>window.onload=function(){window.print();}<\/script></body></html>`);
     win.document.close();
   }
 
   function openQrCard(u, reload) {
     let curCode = u.kode_qr || '';
+    let curCardStatus = u.status_kartu || (Number(u.aktif) ? 'aktif' : 'kedaluwarsa');
+    const dm = getDivMeta(u.tim);
+    const accent = dm?.warna_kartu || '#0A88C9';
+    const cardStatusBadge = curCardStatus === 'aktif'
+      ? '<span class="badge badge-hadir" id="emp-qr-st-badge">Aktif</span>'
+      : (curCardStatus === 'dicabut'
+          ? '<span class="badge badge-alpa" id="emp-qr-st-badge">Dicabut</span>'
+          : '<span class="badge badge-terlambat" id="emp-qr-st-badge">Kedaluwarsa</span>');
+
     const m = openModal(`
-      <div class="modal-head"><h2>Kirim &amp; Kelola Kartu QR Pribadi</h2><button class="icon-btn" type="button" data-close>×</button></div>
+      <div class="modal-head"><h2>Kelola &amp; Kirim ID Card QR</h2><button class="icon-btn" type="button" data-close>×</button></div>
       <div class="stack">
         <div class="qr-id-card">
-          <div class="qr-id-head">
+          <div class="qr-id-head" style="background:${esc(accent)}">
             <span class="qr-id-logo"><img src="assets/img/ketik-logo.png" alt="Ketik.com"></span>
-            <span class="small" style="font-weight:700">KARTU PRESENSI</span>
+            <span class="small" style="font-weight:700">${u.tipe === 'magang' ? 'ID MAGANG' : 'KARTU PRESENSI'}</span>
           </div>
           <div class="qr-id-body">
+            ${u.foto_url ? `<img src="${esc(u.foto_url)}" alt="${esc(u.nama)}" style="width:68px;height:68px;border-radius:14px;object-fit:cover;border:2px solid ${esc(accent)};margin:0 auto">` : ''}
             <div class="qr-holder" id="emp-qr-svg" style="padding:10px"></div>
             <div>
               <div class="qr-id-name">${esc(u.nama)}</div>
-              <div class="qr-id-role">${esc(u.tim)}${u.jabatan ? ' · ' + esc(u.jabatan) : ''}</div>
+              <div class="qr-id-role">${esc(u.tim)}${dm?.kode_unik ? ' (' + esc(dm.kode_unik) + ')' : ''}${u.jabatan ? ' · ' + esc(u.jabatan) : ''}</div>
+              ${u.tipe === 'magang' ? `<div class="small muted" style="margin-top:3px">Magang${u.kampus ? ' · ' + esc(u.kampus) : ''}${u.tgl_selesai ? ' · s/d ' + esc(u.tgl_selesai) : ''}</div>` : ''}
             </div>
-            <div class="qr-id-code" id="emp-qr-code-txt">${esc(curCode)}</div>
+            <div style="display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap">
+              ${cardStatusBadge}
+              <div class="qr-id-code" id="emp-qr-code-txt" style="margin:0">${esc(curCode)}</div>
+            </div>
+            ${u.terakhir_dipakai ? `<div class="small muted">Terakhir scan: ${esc(u.terakhir_dipakai)}</div>` : ''}
           </div>
         </div>
         <div class="qr-share-grid">
@@ -1619,10 +1845,11 @@
           <a class="btn btn-secondary btn-sm" id="emp-qr-wa" target="_blank" rel="noopener noreferrer">Kirim via WhatsApp</a>
           <a class="btn btn-secondary btn-sm" id="emp-qr-mail">Kirim via Email</a>
           <button type="button" class="btn btn-secondary btn-sm" id="emp-qr-dl">Unduh Kartu PNG</button>
-          <button type="button" class="btn btn-secondary btn-sm" id="emp-qr-print">Cetak Kartu</button>
-          <button type="button" class="btn btn-ghost btn-sm" id="emp-qr-rotate">Putar QR Baru</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="emp-qr-print">Cetak Depan-Belakang</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="emp-qr-rotate">Terbitkan QR Baru</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="emp-qr-revoke" style="color:var(--status-alpa)">Cabut Kartu</button>
         </div>
-        <p class="muted small" style="text-align:center">Kirim link kartu atau gambar PNG ini ke <b>${esc(u.nama)}</b>. Karyawan cukup buka link / scan QR di halaman depan tanpa perlu login. Jika kartu tersebar, klik <b>Putar QR Baru</b>.</p>
+        <p class="muted small" style="text-align:center">Kirim link kartu atau gambar PNG ini ke <b>${esc(u.nama)}</b>. Jika kartu hilang, pilih <b>Cabut Kartu</b> agar langsung nonaktif lalu <b>Terbitkan QR Baru</b>.</p>
       </div>`);
     m.$('[data-close]').addEventListener('click', m.close);
 
@@ -1631,7 +1858,7 @@
       const msg = `Halo ${u.nama}, berikut Kartu QR Presensi Pribadi Ketik.com Anda (${u.tim}).\nKode QR: ${code}\nBuka link ini untuk lihat kartu QR & langsung absen masuk/pulang: ${link}`;
       const waBtn = m.$('#emp-qr-wa');
       const mailBtn = m.$('#emp-qr-mail');
-      if (waBtn) waBtn.href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      if (waBtn) waBtn.href = `https://wa.me/${u.no_hp ? String(u.no_hp).replace(/[^0-9]/g, '').replace(/^0/, '62') : ''}?text=${encodeURIComponent(msg)}`;
       if (mailBtn) mailBtn.href = `mailto:${encodeURIComponent(u.email || '')}?subject=${encodeURIComponent('Kartu QR Presensi Ketik.com - ' + u.nama)}&body=${encodeURIComponent(msg)}`;
     }
 
@@ -1656,7 +1883,7 @@
         await navigator.clipboard.writeText(link);
         toast('Link kartu QR pribadi berhasil disalin');
       } catch (e) {
-        window.prompt('Salin link Kartu QR ini untuk dikirim ke karyawan:', link);
+        window.prompt('Salin link Kartu QR ini untuk dikirim ke anggota:', link);
       }
     });
 
@@ -1671,7 +1898,7 @@
         const ctx = c.getContext('2d');
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, c.width, c.height);
-        ctx.fillStyle = '#0A88C9';
+        ctx.fillStyle = accent;
         ctx.fillRect(0, 0, c.width, 82);
         ctx.fillStyle = '#3ABCA5';
         ctx.fillRect(0, 82, c.width, 8);
@@ -1686,12 +1913,12 @@
         ctx.fillStyle = '#475569';
         ctx.font = '17px sans-serif';
         ctx.fillText(`${u.tim || ''}${u.jabatan ? ' · ' + u.jabatan : ''}`.slice(0, 42), c.width / 2, 552);
-        ctx.fillStyle = '#0A88C9';
+        ctx.fillStyle = accent;
         ctx.font = 'bold 18px monospace';
         ctx.fillText(curCode, c.width / 2, 600);
         const a = document.createElement('a');
         a.href = c.toDataURL('image/png');
-        a.download = `kartu-qr-${(u.nama || 'karyawan').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+        a.download = `kartu-qr-${(u.nama || 'anggota').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
         a.click();
         toast('Kartu QR PNG siap dikirim');
       };
@@ -1700,29 +1927,46 @@
 
     m.$('#emp-qr-print').addEventListener('click', () => {
       const svg = m.$('#emp-qr-svg').innerHTML;
-      const win = window.open('', '_blank', 'width=480,height=640');
+      const win = window.open('', '_blank', 'width=760,height=560');
       if (!win) { toast('Izinkan pop-up browser untuk mencetak kartu QR', 'err'); return; }
-      win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Kartu QR · ${esc(u.nama)}</title>
-        <style>body{font-family:sans-serif;text-align:center;padding:30px;color:#0f172a}
-        .card{border:2px solid #0A88C9;border-radius:14px;overflow:hidden;max-width:340px;margin:0 auto}
-        .head{background:#0A88C9;border-bottom:4px solid #3ABCA5;color:#fff;padding:14px;font-weight:700;font-size:14px}
-        .body{padding:22px}.qr svg{width:220px;height:220px}.name{font-size:18px;font-weight:700;margin-top:10px}
-        .meta{color:#475569;font-size:13px;margin-top:4px}.code{margin-top:12px;font-family:monospace;font-weight:700;color:#0A88C9}</style>
-        </head><body><div class="card"><div class="head">KETIK.COM · KARTU PRESENSI REDAKSI</div>
-        <div class="body"><div class="qr">${svg}</div><div class="name">${esc(u.nama)}</div>
-        <div class="meta">${esc(u.tim)}${u.jabatan ? ' · ' + esc(u.jabatan) : ''}</div>
-        <div class="code">${esc(curCode)}</div></div></div>
-        <script>window.onload=function(){window.print();}<\/script></body></html>`);
+      const htmlCard = buildPrintableIdCardHtml({ ...u, kode_qr: curCode }, svg);
+      win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>ID Card QR · ${esc(u.nama)}</title>
+        <style>body{font-family:sans-serif;padding:24px;color:#0f172a}
+        .pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:660px;margin:0 auto}
+        .card{border:2px solid #cbd5e1;border-radius:14px;overflow:hidden;text-align:center;display:flex;flex-direction:column}
+        .head{border-bottom:4px solid #3ABCA5;color:#fff;padding:12px;font-weight:700;font-size:13px}
+        .body{padding:20px;flex:1;display:flex;flex-direction:column;justify-content:center}.qr svg{width:170px;height:170px}.name{font-size:18px;font-weight:700;margin-top:8px}
+        .meta{color:#475569;font-size:12.5px;margin-top:4px}.badge-valid{margin-top:10px;font-size:12px;font-weight:700;color:#0f766e}
+        .code{margin-top:10px;font-family:monospace;font-weight:700;color:#0A88C9}</style>
+        </head><body>${htmlCard}<script>window.onload=function(){window.print();}<\/script></body></html>`);
       win.document.close();
     });
 
     m.$('#emp-qr-rotate').addEventListener('click', async () => {
+      const alasan = window.prompt('Alasan penerbitan ulang QR (opsional):', 'Pembaruan kartu ID');
+      if (alasan === null) return;
       try {
-        const res = await Api.post('karyawan.rotate_qr', { id: u.id });
+        const res = await Api.post('karyawan.rotate_qr', { id: u.id, alasan });
         curCode = res.kode_qr;
         u.kode_qr = curCode;
+        curCardStatus = 'aktif';
+        const stBadge = m.$('#emp-qr-st-badge');
+        if (stBadge) { stBadge.className = 'badge badge-hadir'; stBadge.textContent = 'Aktif'; }
         drawEmpQr(curCode);
-        toast('Kode QR pribadi baru berhasil dibuat');
+        toast('Kode QR baru berhasil diterbitkan & langsung aktif');
+        reload();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+
+    m.$('#emp-qr-revoke').addEventListener('click', async () => {
+      const alasan = window.prompt('Alasan pencabutan kartu QR (mis. kartu hilang/rusak):', 'Kartu hilang');
+      if (alasan === null) return;
+      try {
+        await Api.post('karyawan.revoke_qr', { id: u.id, alasan });
+        curCardStatus = 'dicabut';
+        const stBadge = m.$('#emp-qr-st-badge');
+        if (stBadge) { stBadge.className = 'badge badge-alpa'; stBadge.textContent = 'Dicabut'; }
+        toast('Kartu QR dicabut dan langsung tidak berlaku');
         reload();
       } catch (e) { toast(e.message, 'err'); }
     });
@@ -1734,13 +1978,37 @@
       ...(state.divisiJadwal || []).map((d) => d.nama),
       'Redaksi', 'Liputan / Jurnalis', 'Magang Redaksi', 'Editor', 'IT & Digital', 'Desain & Konten', 'Bisnis & Kemitraan', 'HR & Keuangan'
     ]));
+    let uploadedFoto = '';
     const m = openModal(`
-      <div class="modal-head"><h2>${edit ? 'Ubah Data' : 'Tambah'} Karyawan</h2><button class="icon-btn" type="button" data-close>×</button></div>
+      <div class="modal-head"><h2>${edit ? 'Ubah Data' : 'Tambah'} Anggota</h2><button class="icon-btn" type="button" data-close>×</button></div>
       <div class="form">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <img id="e-foto-prev" src="${u?.foto_url ? esc(u.foto_url) : ''}" alt="Foto Anggota" style="width:62px;height:62px;border-radius:14px;object-fit:cover;border:1px solid var(--panel-border);${u?.foto_url ? '' : 'display:none'}">
+          <div class="field" style="flex:1;min-width:180px">
+            <span>Foto ID Card Anggota (Opsional)</span>
+            <input type="file" id="e-foto-file" accept="image/png,image/jpeg,image/webp">
+          </div>
+        </div>
         <label class="field"><span>Nama Lengkap</span><input id="e-nama" value="${esc(u?.nama || '')}" required placeholder="Masukkan nama lengkap"></label>
         <div class="field-row">
           <label class="field"><span>Alamat Email</span><input type="email" id="e-email" value="${esc(u?.email || '')}" required placeholder="nama@ketik.com"></label>
+          <label class="field"><span>Nomor HP / WhatsApp</span><input type="tel" id="e-hp" value="${esc(u?.no_hp || '')}" placeholder="0812xxxxxxxx"></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Tipe Anggota</span>
+            <select id="e-tipe">
+              <option value="karyawan" ${(u?.tipe || 'karyawan') === 'karyawan' ? 'selected' : ''}>Karyawan</option>
+              <option value="magang" ${(u?.tipe || '') === 'magang' ? 'selected' : ''}>Peserta Magang</option>
+            </select>
+          </label>
           <label class="field"><span>Hak Akses</span><select id="e-peran">${Object.entries(PERAN_LABEL).filter(([k]) => k !== 'atasan' || u?.peran === 'atasan').map(([k, v]) => `<option value="${k}" ${(u?.peran || 'karyawan') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+        </div>
+        <div id="e-magang-box" class="config-section" style="gap:10px" ${(u?.tipe || 'karyawan') === 'magang' ? '' : 'hidden'}>
+          <label class="field"><span>Asal Kampus / Sekolah</span><input id="e-kampus" value="${esc(u?.kampus || '')}" placeholder="Contoh: Universitas Airlangga"></label>
+          <div class="field-row">
+            <label class="field"><span>Tanggal Mulai Magang</span><input type="date" id="e-tgl-mulai" value="${esc(u?.tgl_mulai || todayISO())}"></label>
+            <label class="field"><span>Tanggal Selesai Magang</span><input type="date" id="e-tgl-selesai" value="${esc(u?.tgl_selesai || '')}"></label>
+          </div>
         </div>
         <div class="field-row">
           <label class="field">
@@ -1771,7 +2039,7 @@
         </label>
         <div id="e-qr-box" class="config-section" style="gap:8px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span class="small" style="font-weight:700;color:var(--text)">QR Pribadi Karyawan</span>
+            <span class="small" style="font-weight:700;color:var(--text)">QR Pribadi Anggota</span>
             <span class="shift-tag">Otomatis</span>
           </div>
           ${edit && u?.kode_qr ? `
@@ -1782,9 +2050,9 @@
                 <button type="button" class="btn btn-secondary btn-sm" id="e-open-qr" style="width:fit-content">${ico('qr', 14)} Kirim / Cetak Kartu QR</button>
               </div>
             </div>
-          ` : '<p class="muted small">Kode &amp; Kartu QR pribadi unik (<code>KTK-...</code>) otomatis dibuat begitu data disimpan, lalu langsung muncul untuk dikirim ke karyawan.</p>'}
+          ` : '<p class="muted small">Kode &amp; ID Card QR unik (<code>KTK-...</code>) otomatis dibuat begitu data disimpan, lalu langsung muncul untuk dicetak atau dikirim ke anggota.</p>'}
         </div>
-        <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="e-aktif" ${!edit || Number(u.aktif) ? 'checked' : ''}> <span>Karyawan Masih Aktif Bekerja</span></label>
+        <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="e-aktif" ${!edit || Number(u.aktif) ? 'checked' : ''}> <span>Anggota Masih Aktif</span></label>
         <div class="alert alert-error" id="e-err" hidden></div>
         <div style="display:flex;justify-content:flex-end;gap:10px">
           <button class="btn btn-secondary" type="button" data-close-btn>Batal</button>
@@ -1793,6 +2061,16 @@
       </div>`);
     m.$('[data-close]').addEventListener('click', m.close);
     m.$('[data-close-btn]').addEventListener('click', m.close);
+    m.$('#e-foto-file').addEventListener('change', async (e) => {
+      const f = e.target.files?.[0];
+      if (!f) return;
+      try {
+        uploadedFoto = await resizePhotoFile(f, 520);
+        const img = m.$('#e-foto-prev');
+        img.src = uploadedFoto;
+        img.style.display = 'block';
+      } catch (err) { toast(err.message, 'err'); }
+    });
     if (edit && u?.kode_qr && window.qrcode) {
       const miniHolder = m.$('#e-qr-mini-svg');
       if (miniHolder) {
@@ -1815,6 +2093,13 @@
     m.$('#e-tim').addEventListener('input', syncDivHours);
     syncDivHours();
 
+    const syncTipeField = () => {
+      const isMagang = m.$('#e-tipe').value === 'magang';
+      m.$('#e-magang-box').hidden = !isMagang;
+    };
+    m.$('#e-tipe').addEventListener('change', syncTipeField);
+    syncTipeField();
+
     const syncPassField = () => {
       const peranVal = m.$('#e-peran').value;
       const isAdm = peranVal === 'admin';
@@ -1830,7 +2115,12 @@
       const errBox = m.$('#e-err'); errBox.hidden = true;
       const nama = m.$('#e-nama').value.trim();
       const email = m.$('#e-email').value.trim();
+      const no_hp = m.$('#e-hp').value.trim();
       const peran = m.$('#e-peran').value;
+      const tipe = m.$('#e-tipe').value;
+      const kampus = m.$('#e-kampus').value.trim();
+      const tgl_mulai = m.$('#e-tgl-mulai').value;
+      const tgl_selesai = m.$('#e-tgl-selesai').value;
       const sandi = m.$('#e-sandi').value;
       if (!nama) { errBox.textContent = 'Nama lengkap wajib diisi.'; errBox.hidden = false; return; }
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -1844,30 +2134,43 @@
           id: u?.id || 0,
           nama,
           email,
+          no_hp,
           peran,
+          tipe,
+          kampus,
+          tgl_mulai,
+          tgl_selesai,
           tim: m.$('#e-tim').value,
           jabatan: m.$('#e-jabatan').value,
+          foto: uploadedFoto || undefined,
           kata_sandi: sandi,
           aktif: m.$('#e-aktif').checked ? 1 : 0
         });
         m.close();
         const list = await reload();
-        const qrCode = res.kode_qr || (Array.isArray(list) ? list.find((x) => Number(x.id) === Number(res.id))?.kode_qr : '') || '';
+        const createdObj = Array.isArray(list) ? list.find((x) => Number(x.id) === Number(res.id)) : null;
+        const qrCode = res.kode_qr || createdObj?.kode_qr || '';
         if (peran === 'karyawan' && qrCode && (!edit || !u?.kode_qr)) {
-          toast('Karyawan ditambahkan & QR pribadi otomatis dibuat');
-          openQrCard({
+          toast('Anggota ditambahkan & ID Card QR otomatis dibuat');
+          openQrCard(createdObj || {
             id: Number(res.id),
             nama,
             email,
+            no_hp,
             peran,
+            tipe,
+            kampus,
+            tgl_mulai,
+            tgl_selesai,
             tim: m.$('#e-tim').value || 'Redaksi',
             jabatan: m.$('#e-jabatan').value || '',
             kode_qr: qrCode,
+            status_kartu: 'aktif',
             aktif: m.$('#e-aktif').checked ? 1 : 0
           }, reload);
           return;
         }
-        toast('Data karyawan berhasil disimpan');
+        toast('Data anggota berhasil disimpan');
       } catch (e) { errBox.textContent = e.message; errBox.hidden = false; }
     });
   }
@@ -1880,57 +2183,110 @@
     ]);
     const karyawanList = (empRes.data || []).filter((k) => k.peran !== 'admin' && Number(k.aktif) === 1);
     const riwayatIzin = izinRes.data || [];
+    const antreanPending = riwayatIzin.filter((r) => r.approval_status === 'menunggu');
 
     container.innerHTML = `
-      <div class="grid grid-2">
-        <div class="glass card">
-          <div class="card-head"><h2>Form Izin / Sakit</h2></div>
-          <form class="form" id="izin-form">
-            <label class="field">
-              <span>Pilih Nama Karyawan</span>
-              <select id="i-pengguna" required ${karyawanList.length ? '' : 'disabled'}>
-                ${karyawanList.length ? karyawanList.map((k) => `<option value="${k.id}">${esc(k.nama)} — ${esc(k.tim)}</option>`).join('') : '<option value="">Belum ada karyawan aktif</option>'}
-              </select>
-            </label>
-            <label class="field">
-              <span>Alasan Tidak Masuk</span>
-              <select id="i-jenis">
-                <option value="izin">Izin (Keperluan Keluarga / Cuti)</option>
-                <option value="sakit">Sakit</option>
-              </select>
-            </label>
-            <div class="field-row">
-              <label class="field"><span>Mulai Tanggal</span><input type="date" id="i-mulai" value="${todayISO()}"></label>
-              <label class="field"><span>Sampai Tanggal</span><input type="date" id="i-sampai" value="${todayISO()}"></label>
-            </div>
-            <label class="field"><span>Keterangan</span><textarea id="i-catatan" required placeholder="Contoh: Sakit demam (ada surat dokter) atau izin acara keluarga"></textarea></label>
-            <div class="field">
-              <span>Foto Surat / Bukti (Opsional)</span>
-              <button type="button" class="btn btn-secondary btn-sm" id="i-foto" style="width:fit-content">Ambil / Pilih Foto</button>
-              <img id="i-preview" class="shot-preview" style="max-width:220px;margin-top:10px;display:none" alt="Foto bukti">
-            </div>
-            <div class="alert alert-error" id="i-err" hidden></div>
-            <button class="btn btn-primary" type="submit">Simpan Data Izin / Sakit</button>
-          </form>
-        </div>
-
+      <div class="stack">
+        ${antreanPending.length ? `
         <div class="glass card">
           <div class="card-head">
-            <h2>Daftar Karyawan yang Pernah Izin / Sakit</h2>
-            <span class="pill-note">${riwayatIzin.length} data</span>
+            <div>
+              <h2>Antrean Persetujuan Izin / Dinas Luar</h2>
+              <p class="muted small">Pengajuan mandiri dari anggota lewat halaman scan QR</p>
+            </div>
+            <span class="badge badge-terlambat">${antreanPending.length} menunggu</span>
           </div>
-          ${riwayatIzin.length ? `
           <div class="table-wrap"><table>
-            <thead><tr><th>Tanggal</th><th>Nama Karyawan</th><th>Status</th><th>Keterangan</th></tr></thead>
-            <tbody>${riwayatIzin.map((r) => `<tr>
-              <td>${fmtTanggal(r.tanggal)}</td>
-              <td style="font-weight:600">${esc(r.nama)}</td>
-              <td>${badge(r.status)}</td>
-              <td class="wrap">${esc(r.catatan || '—')}</td>
+            <thead><tr><th>Tanggal</th><th>Anggota &amp; Divisi</th><th>Jenis</th><th>Alasan &amp; Lampiran</th><th>Keputusan Admin</th></tr></thead>
+            <tbody>${antreanPending.map((r) => `<tr>
+              <td class="tabular">${fmtTanggal(r.tanggal)}</td>
+              <td><div class="cell-stack"><span style="font-weight:600">${esc(r.nama)}</span><span class="cell-sub">${esc(r.tim)}</span></div></td>
+              <td>${badge(r.jenis_izin || r.status)}</td>
+              <td class="wrap">${esc(r.catatan || '—')}${r.foto_url ? ` <button type="button" class="btn btn-ghost btn-sm" data-view-izin-foto="${esc(r.foto_url)}">Lihat Bukti</button>` : ''}</td>
+              <td>
+                <div class="row-actions">
+                  <button type="button" class="btn btn-primary btn-sm" data-izin-dec="disetujui" data-izin-id="${r.id}">Setujui</button>
+                  <button type="button" class="btn btn-ghost btn-sm" data-izin-dec="ditolak" data-izin-id="${r.id}">Tolak</button>
+                </div>
+              </td>
             </tr>`).join('')}</tbody>
-          </table></div>` : '<p class="muted small">Belum ada catatan karyawan yang izin atau sakit.</p>'}
+          </table></div>
+        </div>` : ''}
+
+        <div class="grid grid-2">
+          <div class="glass card">
+            <div class="card-head"><h2>Form Izin / Sakit / Dinas Luar</h2></div>
+            <form class="form" id="izin-form">
+              <label class="field">
+                <span>Pilih Nama Karyawan</span>
+                <select id="i-pengguna" required ${karyawanList.length ? '' : 'disabled'}>
+                  ${karyawanList.length ? karyawanList.map((k) => `<option value="${k.id}">${esc(k.nama)} — ${esc(k.tim)}</option>`).join('') : '<option value="">Belum ada karyawan aktif</option>'}
+                </select>
+              </label>
+              <label class="field">
+                <span>Alasan Tidak Masuk</span>
+                <select id="i-jenis">
+                  <option value="izin">Izin (Keperluan Keluarga / Cuti)</option>
+                  <option value="sakit">Sakit</option>
+                  <option value="dinas_luar">Dinas Luar / Liputan Khusus</option>
+                </select>
+              </label>
+              <div class="field-row">
+                <label class="field"><span>Mulai Tanggal</span><input type="date" id="i-mulai" value="${todayISO()}"></label>
+                <label class="field"><span>Sampai Tanggal</span><input type="date" id="i-sampai" value="${todayISO()}"></label>
+              </div>
+              <label class="field"><span>Keterangan</span><textarea id="i-catatan" required placeholder="Contoh: Sakit demam (ada surat dokter), izin keluarga, atau surat tugas dinas luar"></textarea></label>
+              <div class="field">
+                <span>Foto Surat / Bukti (Opsional)</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="i-foto" style="width:fit-content">Ambil / Pilih Foto</button>
+                <img id="i-preview" class="shot-preview" style="max-width:220px;margin-top:10px;display:none" alt="Foto bukti">
+              </div>
+              <div class="alert alert-error" id="i-err" hidden></div>
+              <button class="btn btn-primary" type="submit">Simpan Data Izin / Sakit</button>
+            </form>
+          </div>
+
+          <div class="glass card">
+            <div class="card-head">
+              <h2>Riwayat Pengajuan Izin &amp; Sakit</h2>
+              <span class="pill-note">${riwayatIzin.length} data</span>
+            </div>
+            ${riwayatIzin.length ? `
+            <div class="table-wrap"><table>
+              <thead><tr><th>Tanggal</th><th>Nama Karyawan</th><th>Jenis</th><th>Status Persetujuan</th><th>Keterangan</th></tr></thead>
+              <tbody>${riwayatIzin.map((r) => {
+                const stApv = r.approval_status || 'disetujui';
+                const apvBadge = stApv === 'menunggu'
+                  ? '<span class="badge badge-terlambat">Menunggu</span>'
+                  : (stApv === 'ditolak' ? '<span class="badge badge-alpa">Ditolak</span>' : '<span class="badge badge-hadir">Disetujui</span>');
+                return `<tr>
+                  <td>${fmtTanggal(r.tanggal)}</td>
+                  <td style="font-weight:600">${esc(r.nama)}</td>
+                  <td>${badge(r.jenis_izin || r.status)}</td>
+                  <td>${apvBadge}</td>
+                  <td class="wrap">${esc(r.catatan || '—')}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>` : '<p class="muted small">Belum ada catatan karyawan yang izin atau sakit.</p>'}
+          </div>
         </div>
       </div>`;
+
+    container.querySelectorAll('[data-izin-dec]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        try {
+          await Api.post('absensi.izin_approve', { id: Number(b.dataset.izinId), keputusan: b.dataset.izinDec });
+          toast(b.dataset.izinDec === 'disetujui' ? 'Pengajuan disetujui' : 'Pengajuan ditolak');
+          renderIzinSection(container);
+        } catch (e) { toast(e.message, 'err'); }
+      });
+    });
+    container.querySelectorAll('[data-view-izin-foto]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const m = openModal(`<div class="modal-head"><h2>Bukti Lampiran</h2><button class="icon-btn" type="button" data-close>×</button></div><img src="${esc(b.dataset.viewIzinFoto)}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:10px">`);
+        m.$('[data-close]').addEventListener('click', m.close);
+      });
+    });
 
     let foto = null;
     byId('i-foto').addEventListener('click', async () => {
