@@ -269,7 +269,7 @@
     const wfhRuleHint = `Tanpa QR kantor, ${d.wajib_foto ? 'foto kehadiran, ' : ''}wajib isi catatan kegiatan`;
 
     view.innerHTML = `
-      ${pageHead(`${sapaan}, ${esc(state.user.nama.split(' ')[0])}`, `${esc(state.user.tim || 'Karyawan')} · ${fmtTanggal(d.tanggal)}`)}
+      ${pageHead(`${sapaan}, ${state.user.nama.split(' ')[0]}`, `${state.user.tim || 'Karyawan'} · ${fmtTanggal(d.tanggal)}`)}
       <div class="stack">
         <div class="beranda-grid">
           <div class="glass card clock-card">
@@ -525,7 +525,7 @@
     const pctOf = (n) => (totalKaryawan > 0 ? Math.round((n / totalKaryawan) * 100) : 0);
 
     view.innerHTML = `
-      ${pageHead('Beranda', `Ringkasan kehadiran karyawan ${esc(state.org.nama)} hari ini (${fmtTanggal(todayISO())})`, `
+      ${pageHead('Beranda', `Ringkasan kehadiran karyawan ${state.org.nama} hari ini (${fmtTanggal(todayISO())})`, `
         <button class="btn btn-secondary btn-sm" id="dash-go-harian">Cek Absen Hari Ini</button>
         <button class="btn btn-primary btn-sm" id="dash-go-laporan">Lihat Semua Riwayat</button>
       `)}
@@ -859,7 +859,7 @@
           <label class="field"><span>Jam Masuk</span><input type="time" id="k-masuk" value="${esc(d.masuk)}"></label>
           <label class="field"><span>Jam Pulang</span><input type="time" id="k-pulang" value="${esc(d.pulang)}"></label>
         </div>
-        <label class="field"><span>Alasan Perubahan (Wajib diisi)</span><textarea id="k-catatan" placeholder="Contoh: Lupa absen pulang / salah pilih shift"></textarea></label>
+        <label class="field"><span>Alasan Perubahan (Wajib diisi)</span><textarea id="k-catatan" placeholder="Contoh: Lupa absen pulang atau penyesuaian jam kerja"></textarea></label>
         <div class="alert alert-error" id="k-err" hidden></div>
         <div style="display:flex;justify-content:flex-end;gap:10px">
           <button class="btn btn-secondary" type="button" data-close-btn>Batal</button>
@@ -1325,7 +1325,7 @@
         byId('k-tech-table').innerHTML = '';
         byId('k-detail-table').innerHTML = `<div style="padding:16px">
           <div class="alert alert-error">Karyawan yang sudah masuk minimal 10 hari hanya <b>${data.length} orang</b> (dibutuhkan minimal <b>${k} orang</b> untuk dibagi menjadi ${k} kategori). Perluas rentang tanggal atau pilih jumlah kategori yang lebih sedikit.</div>
-          ${ineligibleData.length ? `<table style="margin-top:12px"><thead><tr><th>Nama Karyawan</th><th>Shift</th><th>Hari Masuk</th><th>Keterangan</th></tr></thead><tbody>${ineligibleData.map((u) => `<tr><td>${esc(u.nama)}</td><td>${esc(u.tim)}</td><td class="tabular">${u.hari_tercatat} hari</td><td class="muted small">Belum mencapai minimal 10 hari masuk</td></tr>`).join('')}</tbody></table>` : ''}
+          ${ineligibleData.length ? `<table style="margin-top:12px"><thead><tr><th>Nama Karyawan</th><th>Divisi</th><th>Hari Masuk</th><th>Keterangan</th></tr></thead><tbody>${ineligibleData.map((u) => `<tr><td>${esc(u.nama)}</td><td>${esc(u.tim)}</td><td class="tabular">${u.hari_tercatat} hari</td><td class="muted small">Belum mencapai minimal 10 hari masuk</td></tr>`).join('')}</tbody></table>` : ''}
         </div>`;
         toast(`Karyawan yang sudah masuk minimal 10 hari hanya ${data.length} orang. Perluas rentang tanggal.`, 'err');
         return false;
@@ -1346,7 +1346,7 @@
     byId('k-exp-xls').addEventListener('click', () => {
       if (!engine) { toast('Belum ada hasil penilaian untuk diunduh', 'err'); return; }
       const details = engine.memberDetails();
-      const cols = ['No', 'Nama Karyawan', 'Shift', 'Hari Masuk', 'Total Hari Kerja', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja', 'Nilai Disiplin (0-100)', 'Kategori Disiplin', 'Keterangan'];
+      const cols = ['No', 'Nama Karyawan', 'Divisi', 'Hari Masuk', 'Total Hari Kerja', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja', 'Nilai Disiplin (0-100)', 'Kategori Disiplin', 'Keterangan'];
       const rows = details.map((m, i) => [
         i + 1, m.nama, m.tim, m.hari_tercatat, m.total_hari, m.rata_terlambat, m.persen_tidak_hadir + '%', m.rata_jam_kerja, m.skor_disiplin, m.clusterLabel, m.rekomendasi
       ]);
@@ -1476,6 +1476,8 @@
           (r.nama || '').toLowerCase().includes(q) ||
           (r.tim || '').toLowerCase().includes(q) ||
           (r.tanggal || '').toLowerCase().includes(q) ||
+          (r.kegiatan || '').toLowerCase().includes(q) ||
+          (r.mode || '').toLowerCase().includes(q) ||
           (r.catatan || '').toLowerCase().includes(q) ||
           (r.status || '').toLowerCase().includes(q)
         );
@@ -1674,7 +1676,7 @@
             <form class="form" id="org-form">
               <div class="config-section">
                 <div class="config-section-title"><span class="step-num">1</span> Profil &amp; Jam Kerja Kantor</div>
-                <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: Toko Maju Jaya"></label>
+                <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: PT Maju Bersama"></label>
                 <label class="field"><span>Pilih Jenis Usaha (Isi Jam Otomatis)</span><select id="o-industri">
                   ${Object.entries(presets).map(([k, p]) => `<option value="${k}" ${o.industri === k ? 'selected' : ''}>${esc(p.label)} (${esc(p.jam_masuk)}–${esc(p.jam_pulang)})</option>`).join('')}
                 </select></label>

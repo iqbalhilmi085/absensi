@@ -46,7 +46,7 @@ const Api = (() => {
     return handle(res);
   }
 
-  async function post(action, data) {
+  async function post(action, data, _retried = false) {
     await ensureCsrf();
     const res = await fetch(`${base}/api.php?action=${encodeURIComponent(action)}`, {
       method: 'POST',
@@ -57,7 +57,10 @@ const Api = (() => {
       },
       body: JSON.stringify(data || {})
     });
-    if (res.status === 419) csrf = null;
+    if (res.status === 419) {
+      csrf = null;
+      if (!_retried) return post(action, data, true);
+    }
     return handle(res);
   }
 

@@ -131,6 +131,11 @@ $csrfBudi = httpReq("{$base}/backend/api.php?action=auth.csrf", $cookieBudi)['js
 $kioskAbsen = httpReq("{$base}/backend/api.php?action=kiosk.absen", $cookieBudi, ['pengguna_id' => $budiId], $csrfBudi);
 check($kioskAbsen['code'] === 410, "HTTP POST kiosk.absen returns 410 (got {$kioskAbsen['code']})");
 
+$kioskAbsenNoCsrf = httpReq("{$base}/backend/api.php?action=kiosk.absen", null, ['pengguna_id' => $budiId]);
+check($kioskAbsenNoCsrf['code'] === 410, "HTTP POST kiosk.absen without CSRF short-circuits 410 (got {$kioskAbsenNoCsrf['code']})");
+$rateRowsAfterKiosk = (int) $pdo->query("SELECT COUNT(*) FROM rate_limit WHERE kunci LIKE 'api:kiosk.%'")->fetchColumn();
+check($rateRowsAfterKiosk === 0, "kiosk.* writes 0 rows to rate_limit DB (got {$rateRowsAfterKiosk})");
+
 $loginBudi = httpReq("{$base}/backend/api.php?action=auth.login", $cookieBudi, ['email' => 'budi@kantor.test', 'kata_sandi' => 'Secret123!'], $csrfBudi);
 check($loginBudi['code'] === 200, "HTTP login as karyawan succeeds (got {$loginBudi['code']})");
 

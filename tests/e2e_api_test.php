@@ -35,6 +35,10 @@ check(str_contains($appJs, 'Mode & Kegiatan') || str_contains($appJs, 'Mode &amp
 check(str_contains($appJs, 'id="a-mode"'), 'app.js adds mode filter #a-mode in Riwayat Absen');
 check(!str_contains($appJs, 'Bagian / Shift'), 'app.js removes legacy Bagian / Shift label');
 check(!str_contains($appJs, 'Keterangan Shift'), 'app.js removes legacy Keterangan Shift label');
+check(!str_contains($appJs, '<th>Shift</th>') && !str_contains($appJs, "'Shift'"), 'app.js removes Shift table/export headers');
+check(!str_contains($appJs, 'salah pilih shift') && !str_contains($appJs, 'Toko Maju Jaya'), 'app.js removes retail/shift placeholders');
+check(!str_contains($appJs, 'pageHead(`${sapaan}, ${esc(') && !str_contains($appJs, 'esc(state.org.nama)} hari ini'), 'app.js avoids double HTML-escaping in pageHead()');
+check(str_contains($appJs, '(r.kegiatan || \'\').toLowerCase().includes(q)') && str_contains($appJs, '(r.mode || \'\').toLowerCase().includes(q)'), 'app.js searches r.kegiatan and r.mode in viewAxel');
 check(!preg_match('/🌙|☀️|📍/u', $appJs), 'app.js contains no emoji characters');
 
 // 3. Full E2E HTTP scenario across karyawan and admin

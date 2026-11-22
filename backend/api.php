@@ -7,6 +7,10 @@ require_once __DIR__ . '/app/absensi.php';
 $action = (string) ($_GET['action'] ?? '');
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
+if ($action === 'kiosk.info' || $action === 'kiosk.absen') {
+    json_error('Mode Kiosk sudah dinonaktifkan. Silakan login menggunakan akun masing-masing.', 410);
+}
+
 if ($method === 'POST') {
     verify_csrf();
     // Pembatasan laju umum untuk aksi tulis, terpisah dari penguncian login.

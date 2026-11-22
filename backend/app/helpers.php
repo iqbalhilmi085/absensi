@@ -219,3 +219,21 @@ function minutes_between(?string $a, ?string $b): ?int
     }
     return (int) round((strtotime($b) - strtotime($a)) / 60);
 }
+
+function valid_iso_date(?string $date): bool
+{
+    if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+        return false;
+    }
+    [$y, $m, $d] = array_map('intval', explode('-', $date));
+    return checkdate($m, $d, $y);
+}
+
+function valid_time_hm(?string $time): bool
+{
+    if (!is_string($time) || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $time)) {
+        return false;
+    }
+    $parts = array_map('intval', explode(':', $time));
+    return $parts[0] >= 0 && $parts[0] <= 23 && $parts[1] >= 0 && $parts[1] <= 59 && (($parts[2] ?? 0) >= 0 && ($parts[2] ?? 0) <= 59);
+}
