@@ -28,8 +28,8 @@ const PdfExport = (() => {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.setTextColor(30, 64, 175);
-    doc.text(o.orgName || 'Organisasi', margin, 58);
+    doc.setTextColor(10, 136, 201);
+    doc.text(o.orgName || 'PT Ketik Media Siber (Ketik.com)', margin, 58);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -79,7 +79,7 @@ const PdfExport = (() => {
     ry += 6;
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text('Dokumen resmi sistem manajemen kehadiran internal perusahaan.', margin, ry);
+    doc.text('Dokumen resmi sistem manajemen kehadiran internal PT Ketik Media Siber (Ketik.com).', margin, ry);
 
     // Nomor halaman
     const pages = doc.internal.getNumberOfPages();

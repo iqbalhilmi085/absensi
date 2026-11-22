@@ -24,7 +24,7 @@ define('DB_NAME', 'absensi');
 define('DB_USER', 'root');
 define('DB_PASS', '');
 
-define('APP_NAME', 'Absensi Universal');
+define('APP_NAME', 'Absensi Ketik.com');
 
 // Keamanan login (LANGKAH 2)
 define('LOGIN_MAX_FAILS', 5);        // jumlah percobaan gagal sebelum dikunci
@@ -48,6 +48,13 @@ define('RATE_LIMIT_ABSEN', 10);      // khusus check-in / check-out / izin per m
 function preset_industri(): array
 {
     return [
+        'media' => [
+            'label' => 'Media & Redaksi (Ketik.com)',
+            'jam_masuk' => '08:00',
+            'jam_pulang' => '17:00',
+            'toleransi_menit' => 15,
+            'hari_kerja' => '1,2,3,4,5',
+        ],
         'kantor' => [
             'label' => 'Kantor',
             'jam_masuk' => '08:00',

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Masuk · Portal Absensi Perkantoran</title>
+<title>Masuk · Absensi Ketik.com</title>
+<link rel="icon" href="assets/img/ketik-icon.png" type="image/png">
 <script>
   document.documentElement.dataset.theme =
     localStorage.getItem('absensi-theme') || 'light';
@@ -14,22 +15,25 @@
 </head>
 <body class="auth-body">
 <div class="auth-shell">
-  <section class="auth-hero" aria-label="Informasi Portal">
+  <section class="auth-hero" aria-label="Informasi Portal Ketik.com">
     <div class="auth-hero-inner">
+      <div class="brand-logo-pill">
+        <img src="assets/img/ketik-logo.png" alt="Ketik.com — Media Kolaborasi Indonesia">
+      </div>
       <div class="auth-hero-badge">
         <svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
-        <span>Sistem Kehadiran Perkantoran</span>
+        <span>Portal Absensi Internal · PT Ketik Media Siber</span>
       </div>
-      <h2>Kelola kehadiran kantor &amp; WFH dalam satu portal yang rapi.</h2>
-      <p>Karyawan, atasan, dan admin HR masuk menggunakan akun masing-masing untuk mencatat kehadiran harian, aktivitas kerja, serta laporan bulanan.</p>
+      <h2>Sistem Kehadiran Redaksi &amp; Kantor Ketik.com</h2>
+      <p>Portal presensi terpadu untuk tim redaksi, liputan, editor, IT, bisnis, dan manajemen PT Ketik Media Siber.</p>
       <div class="auth-features">
         <div class="auth-feature">
           <div class="auth-feature-ico">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>
           </div>
           <div>
-            <strong>Presensi Di Kantor (WFO)</strong>
-            <span>Validasi kode QR lokasi kantor, foto kehadiran, dan radius GPS secara akurat.</span>
+            <strong>Presensi Kantor Redaksi (WFO)</strong>
+            <span>Validasi kode QR kantor, foto kehadiran, dan radius GPS secara akurat.</span>
           </div>
         </div>
         <div class="auth-feature">
@@ -37,8 +41,8 @@
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </div>
           <div>
-            <strong>Presensi WFH + Catatan Kegiatan</strong>
-            <span>Karyawan WFH tetap dapat absen dengan melampirkan rencana dan ringkasan kegiatan harian.</span>
+            <strong>WFH &amp; Liputan Lapangan + Kegiatan</strong>
+            <span>Reporter dan tim remote dapat absen dengan melampirkan rencana dan ringkasan kegiatan.</span>
           </div>
         </div>
         <div class="auth-feature">
@@ -46,26 +50,26 @@
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
           </div>
           <div>
-            <strong>Rekap &amp; Penilaian Disiplin HR</strong>
-            <span>Pantau kehadiran harian, ekspor laporan Excel/PDF, dan evaluasi kedisiplinan tim.</span>
+            <strong>Rekap Kehadiran &amp; Laporan HR</strong>
+            <span>Pantau kehadiran per divisi, ekspor laporan Excel/PDF, dan evaluasi kedisiplinan tim.</span>
           </div>
         </div>
       </div>
     </div>
     <div class="auth-hero-foot">
-      Portal Absensi Korporat · Akses Terproteksi Per Akun
+      PT Ketik Media Siber · Jl. Ketintang Permai Blok BA No.21, Surabaya
     </div>
   </section>
 
   <main class="auth-panel">
     <div class="glass auth-card">
       <div class="brand">
-        <span class="brand-dot" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M9 14l2 2 4-4"/></svg>
+        <span class="brand-icon-box" aria-hidden="true">
+          <img src="assets/img/ketik-icon.png" alt="Ikon Ketik.com">
         </span>
         <div class="auth-card-head">
-          <h1>Masuk ke Akun Anda</h1>
-          <p>Gunakan email kantor untuk Karyawan, Atasan, maupun Admin</p>
+          <h1>Masuk ke Portal Ketik.com</h1>
+          <p>Gunakan akun karyawan, redaktur/atasan, atau admin HR</p>
         </div>
       </div>
 
@@ -73,8 +77,8 @@
 
       <form id="login-form" class="form">
         <label class="field">
-          <span>Email Kantor</span>
-          <input type="email" name="email" autocomplete="username" required placeholder="nama@perusahaan.com">
+          <span>Email Kantor / Redaksi</span>
+          <input type="email" name="email" autocomplete="username" required placeholder="nama@ketik.com">
         </label>
         <label class="field">
           <span>Kata Sandi</span>
@@ -89,7 +93,7 @@
       </form>
 
       <div class="auth-foot-note">
-        Belum punya akses atau lupa kata sandi? Hubungi Admin HR kantor Anda.
+        Belum punya akun atau lupa kata sandi? Hubungi Admin HR PT Ketik Media Siber.
       </div>
     </div>
   </main>

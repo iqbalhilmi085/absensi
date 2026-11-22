@@ -21,9 +21,11 @@ function check(bool $cond, string $label): void
 
 $pdo = db();
 
-// 1. Seed org default must be 'kantor' (08:00-17:00, 1,2,3,4,5)
+// 1. Seed org default must be 'media' (Ketik.com, 08:00-17:00, 1,2,3,4,5)
 $org = $pdo->query('SELECT * FROM organisasi ORDER BY id LIMIT 1')->fetch();
-check(($org['industri'] ?? '') === 'kantor', "seed_organisasi_default sets industri='kantor' (got: " . ($org['industri'] ?? 'null') . ")");
+check(($org['industri'] ?? '') === 'media', "seed_organisasi_default sets industri='media' (got: " . ($org['industri'] ?? 'null') . ")");
+check(str_contains((string) ($org['nama'] ?? ''), 'Ketik'), 'seed_organisasi_default sets Ketik.com organization name');
+check(isset(preset_industri()['media']), 'preset_industri() defines media preset');
 check(($org['jam_masuk'] ?? '') === '08:00' && ($org['jam_pulang'] ?? '') === '17:00', 'seed_organisasi_default sets 08:00-17:00');
 check(($org['hari_kerja'] ?? '') === '1,2,3,4,5', 'seed_organisasi_default sets hari_kerja=1,2,3,4,5');
 

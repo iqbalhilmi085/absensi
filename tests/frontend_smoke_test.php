@@ -40,4 +40,15 @@ foreach (['.auth-shell', '.auth-hero', '.auth-panel', '.pass-wrap', '.mode-switc
 }
 check(!str_contains($css, '@keyframes pulseDot'), 'app.css removes pulsing dot animation');
 
+// Ketik.com branding & asset checks
+check(is_file(__DIR__ . '/../frontend/assets/img/ketik-logo.png'), 'ketik-logo.png asset exists locally');
+check(is_file(__DIR__ . '/../frontend/assets/img/ketik-icon.png'), 'ketik-icon.png asset exists locally');
+check(str_contains($login, 'ketik-logo.png') && str_contains($login, 'Ketik.com'), 'login.html displays Ketik.com logo and brand');
+check(str_contains($login, 'nama@ketik.com'), 'login.html uses @ketik.com email placeholder');
+check(str_contains($index, 'ketik-icon.png') && str_contains($index, 'Ketik.com'), 'index.html displays Ketik.com icon and title');
+check(str_contains(strtolower($css), '#0a88c9') && str_contains(strtolower($css), '#3abca5'), 'app.css applies Ketik.com #0A88C9 and #3ABCA5 brand colors');
+
+$appJs = (string) file_get_contents(__DIR__ . '/../frontend/assets/js/app.js');
+check(str_contains($appJs, 'ketik-divisi-list') && str_contains($appJs, 'Redaksi'), 'app.js provides Ketik.com media division suggestions');
+
 exit($failures > 0 ? 1 : 0);

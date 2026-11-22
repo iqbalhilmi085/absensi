@@ -313,7 +313,7 @@ function seed_organisasi_default(PDO $pdo): void
     if ($count > 0) {
         return;
     }
-    $stmt = $pdo->prepare("INSERT INTO organisasi (nama, industri, kode_lokasi, jam_masuk, jam_pulang, toleransi_menit, hari_kerja, wajib_foto, wajib_barcode, dibuat_pada) VALUES ('Kantor Utama', 'kantor', 'KANTOR-01', '08:00', '17:00', 15, '1,2,3,4,5', 1, 1, ?)");
+    $stmt = $pdo->prepare("INSERT INTO organisasi (nama, industri, kode_lokasi, jam_masuk, jam_pulang, toleransi_menit, hari_kerja, wajib_foto, wajib_barcode, dibuat_pada) VALUES ('PT Ketik Media Siber (Ketik.com)', 'media', 'KETIK-SBY-01', '08:00', '17:00', 15, '1,2,3,4,5', 1, 1, ?)");
     $stmt->execute([date('Y-m-d H:i:s')]);
 }
 

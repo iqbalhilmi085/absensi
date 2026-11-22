@@ -292,15 +292,15 @@
                   <button type="button" class="mode-opt active" data-mode="wfo">
                     ${ico('building', 18)}
                     <div>
-                      <span class="mode-opt-title">Di Kantor (WFO)</span>
-                      <span class="mode-opt-desc">Hadir langsung di kantor</span>
+                      <span class="mode-opt-title">Kantor Redaksi (WFO)</span>
+                      <span class="mode-opt-desc">Hadir di kantor Ketik.com</span>
                     </div>
                   </button>
                   <button type="button" class="mode-opt" data-mode="wfh">
                     ${ico('laptop', 18)}
                     <div>
-                      <span class="mode-opt-title">Work From Home (WFH)</span>
-                      <span class="mode-opt-desc">Kerja jarak jauh + kegiatan</span>
+                      <span class="mode-opt-title">WFH / Liputan</span>
+                      <span class="mode-opt-desc">Liputan luar atau remote + kegiatan</span>
                     </div>
                   </button>
                 </div>
@@ -308,7 +308,7 @@
               </div>
               <label class="field">
                 <span id="kegiatan-label">Rencana / Catatan Kegiatan (Opsional untuk WFO)</span>
-                <textarea id="beranda-kegiatan" placeholder="Contoh: Review laporan keuangan bulanan dan sinkronisasi tim"></textarea>
+                <textarea id="beranda-kegiatan" placeholder="Contoh: Liputan agenda pemkot, menulis 3 berita, dan koordinasi redaksi"></textarea>
               </label>
             ` : stateAbsen === 'out' ? `
               <div class="activity-box" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -1677,7 +1677,7 @@
             <form class="form" id="org-form">
               <div class="config-section">
                 <div class="config-section-title"><span class="step-num">1</span> Profil &amp; Jam Kerja Kantor</div>
-                <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: PT Maju Bersama"></label>
+                <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: PT Ketik Media Siber (Ketik.com)"></label>
                 <label class="field"><span>Pilih Jenis Usaha (Isi Jam Otomatis)</span><select id="o-industri">
                   ${Object.entries(presets).map(([k, p]) => `<option value="${k}" ${o.industri === k ? 'selected' : ''}>${esc(p.label)} (${esc(p.jam_masuk)}–${esc(p.jam_pulang)})</option>`).join('')}
                 </select></label>
@@ -1723,7 +1723,7 @@
                 <div class="field">
                   <span>Kode QR Lokasi Kantor</span>
                   <div style="display:flex;gap:8px;align-items:center">
-                    <input id="o-kode" value="${esc(o.kode_lokasi)}" required placeholder="Contoh: KANTOR-01">
+                    <input id="o-kode" value="${esc(o.kode_lokasi)}" required placeholder="Contoh: KETIK-SBY-01">
                     <button type="button" class="btn btn-secondary btn-sm" id="o-gen-kode">Buat Kode Acak</button>
                   </div>
                 </div>
@@ -1831,12 +1831,13 @@
       const namaKantor = esc(byId('o-nama').value || state.org.nama);
       const win = window.open('', '_blank', 'width=560,height=680');
       if (!win) { toast('Izinkan pop-up browser untuk mencetak poster QR', 'err'); return; }
-      win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Poster QR Absensi</title>
+      win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Poster QR Absensi · Ketik.com</title>
         <style>body{font-family:sans-serif;text-align:center;padding:40px;color:#0f172a}
-        .box{border:2px dashed #cbd5e1;border-radius:16px;padding:32px;max-width:420px;margin:0 auto}
-        h1{margin:0 0 6px;font-size:22px}p{color:#475569;margin:0 0 20px;font-size:14px}
-        .qr svg{width:260px;height:260px}.code{margin-top:14px;font-size:16px;font-weight:700;letter-spacing:1px}</style>
-        </head><body><div class="box"><h1>${namaKantor}</h1><p>Pindai Kode QR ini untuk Absen Masuk &amp; Pulang</p>
+        .box{border:2px dashed #0A88C9;border-radius:16px;padding:32px;max-width:420px;margin:0 auto}
+        .tag{color:#0A88C9;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px}
+        h1{margin:0 0 6px;font-size:21px}p{color:#475569;margin:0 0 20px;font-size:14px}
+        .qr svg{width:260px;height:260px}.code{margin-top:14px;font-size:16px;font-weight:700;letter-spacing:1px;color:#0A88C9}</style>
+        </head><body><div class="box"><div class="tag">Ketik.com · Media Kolaborasi Indonesia</div><h1>${namaKantor}</h1><p>Pindai Kode QR ini untuk Absen Masuk &amp; Pulang</p>
         <div class="qr">${svg}</div><div class="code">${kode}</div></div>
         <script>window.onload=function(){window.print();}<\/script></body></html>`);
       win.document.close();
@@ -2004,13 +2005,34 @@
       <div class="form">
         <label class="field"><span>Nama Lengkap</span><input id="e-nama" value="${esc(u?.nama || '')}" required placeholder="Masukkan nama lengkap"></label>
         <div class="field-row">
-          <label class="field"><span>Alamat Email</span><input type="email" id="e-email" value="${esc(u?.email || '')}" required placeholder="nama@email.com"></label>
+          <label class="field"><span>Alamat Email</span><input type="email" id="e-email" value="${esc(u?.email || '')}" required placeholder="nama@ketik.com"></label>
           <label class="field"><span>Hak Akses</span><select id="e-peran">${Object.entries(PERAN_LABEL).map(([k, v]) => `<option value="${k}" ${(u?.peran || 'karyawan') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>Divisi / Departemen</span><input id="e-tim" value="${esc(u?.tim || 'Operasional')}" placeholder="Contoh: Operasional / Finance"></label>
-          <label class="field"><span>Jabatan</span><input id="e-jabatan" value="${esc(u?.jabatan || 'Staf')}" placeholder="Contoh: Staf / Supervisor"></label>
+          <label class="field"><span>Divisi / Departemen</span><input id="e-tim" list="ketik-divisi-list" value="${esc(u?.tim || 'Redaksi')}" placeholder="Contoh: Redaksi / Liputan"></label>
+          <label class="field"><span>Jabatan</span><input id="e-jabatan" list="ketik-jabatan-list" value="${esc(u?.jabatan || 'Reporter / Jurnalis')}" placeholder="Contoh: Reporter / Editor"></label>
         </div>
+        <datalist id="ketik-divisi-list">
+          <option value="Redaksi">
+          <option value="Liputan / Jurnalis">
+          <option value="Editor">
+          <option value="IT & Digital">
+          <option value="Desain & Konten">
+          <option value="Bisnis & Kemitraan">
+          <option value="HR & Keuangan">
+        </datalist>
+        <datalist id="ketik-jabatan-list">
+          <option value="Pemimpin Redaksi">
+          <option value="Redaktur Pelaksana">
+          <option value="Redaktur">
+          <option value="Reporter / Jurnalis">
+          <option value="Editor Konten">
+          <option value="Video & Fotografer">
+          <option value="Social Media Specialist">
+          <option value="Fullstack Developer">
+          <option value="HR & GA">
+          <option value="Finance">
+        </datalist>
         <label class="field"><span>Kata Sandi Login ${edit ? '(Kosongkan jika tidak ingin mengganti)' : ''}</span><input type="password" id="e-sandi" placeholder="Minimal 6 huruf/angka (dipakai karyawan untuk login)"></label>
         <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="e-aktif" ${!edit || Number(u.aktif) ? 'checked' : ''}> <span>Karyawan Masih Aktif Bekerja</span></label>
         <div class="alert alert-error" id="e-err" hidden></div>

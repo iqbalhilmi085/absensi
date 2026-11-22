@@ -6,11 +6,12 @@
   --radius-panel: 12px;
   --radius-control: 8px;
 
-  --accent: #1d4ed8;
-  --accent-hover: #1e40af;
-  --accent-soft: #eff6ff;
-  --accent-border: #bfdbfe;
+  --accent: #0A88C9;
+  --accent-hover: #0870A6;
+  --accent-soft: #EEF8FD;
+  --accent-border: #BAE3F7;
   --accent-contrast: #ffffff;
+  --ketik-teal: #3ABCA5;
 
   --bg-page: #f8fafc;
   --panel-bg: #ffffff;
@@ -55,24 +56,24 @@
   --status-alpa-bg: #fef2f2;
   --status-alpa-border: #fecaca;
 
-  --mode-wfo: #1d4ed8;
-  --mode-wfo-bg: #eff6ff;
-  --mode-wfo-border: #bfdbfe;
+  --mode-wfo: #0A88C9;
+  --mode-wfo-bg: #EEF8FD;
+  --mode-wfo-border: #BAE3F7;
 
-  --mode-wfh: #4338ca;
-  --mode-wfh-bg: #eef2ff;
-  --mode-wfh-border: #c7d2fe;
+  --mode-wfh: #0F766E;
+  --mode-wfh-bg: #ECFDF5;
+  --mode-wfh-border: #A7F3D0;
 
   --danger: #dc2626;
-  --ring: 0 0 0 3px rgba(29, 78, 216, 0.14);
+  --ring: 0 0 0 3px rgba(10, 136, 201, 0.18);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html[data-theme="dark"] {
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-soft: rgba(59, 130, 246, 0.14);
-  --accent-border: rgba(59, 130, 246, 0.32);
+  --accent: #38BDF8;
+  --accent-hover: #0A88C9;
+  --accent-soft: rgba(10, 136, 201, 0.18);
+  --accent-border: rgba(56, 189, 248, 0.34);
   --accent-contrast: #ffffff;
 
   --bg-page: #0b1120;
@@ -512,13 +513,46 @@ td.wrap { white-space: normal; min-width: 190px; max-width: 340px; }
 .auth-hero {
   position: relative;
   padding: clamp(32px, 5vw, 64px);
-  background: linear-gradient(155deg, #0f172a 0%, #1e293b 55%, #1e3a8a 100%);
+  background: linear-gradient(150deg, #0b1e33 0%, #0d3a5c 54%, #0A88C9 100%);
+  border-right: 4px solid var(--ketik-teal);
   color: #f8fafc;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 32px;
   overflow: hidden;
+}
+.brand-logo-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(11, 30, 51, 0.28);
+}
+.brand-logo-pill img {
+  display: block;
+  height: 36px;
+  width: auto;
+}
+.brand-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  display: grid;
+  place-items: center;
+  padding: 5px;
+  flex: none;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.brand-icon-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 .auth-hero::after {
   content: "";

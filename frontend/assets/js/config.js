@@ -1,4 +1,4 @@
 window.APP_CONFIG = {
-  appName: 'Absensi Universal',
+  appName: 'Absensi Ketik.com',
   apiBase: '../backend'
 };
