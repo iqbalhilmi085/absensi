@@ -51,6 +51,14 @@
     return `<span class="badge badge-${s}">${STATUS_LABEL[s] || s}</span>`;
   }
 
+  function modeBadge(mode) {
+    if (!mode) return '<span class="muted small">—</span>';
+    const m = String(mode).toLowerCase();
+    if (m === 'wfh') return '<span class="badge-wfh">WFH</span>';
+    if (m === 'wfo') return '<span class="badge-wfo">WFO</span>';
+    return `<span class="shift-tag">${esc(m.toUpperCase())}</span>`;
+  }
+
   function empCell(nama) {
     const clean = String(nama || '').trim();
     const parts = clean.split(/\s+/).filter(Boolean);
@@ -66,9 +74,12 @@
     let shiftLabel = '';
     let buktiUrl = '';
     let cleanNote = rawCatatan;
+    let kegiatanText = '';
 
     if (/^https?:\/\//i.test(rawKegiatan)) {
       buktiUrl = rawKegiatan;
+    } else if (rawKegiatan) {
+      kegiatanText = rawKegiatan;
     }
 
     const urlMatch = cleanNote.match(/https?:\/\/[^\s|]+/i);
@@ -83,7 +94,7 @@
       cleanNote = cleanNote.replace(/Shift:\s*[^|]+\|?/i, '').trim();
     }
 
-    return { shiftLabel, buktiUrl, cleanNote };
+    return { shiftLabel, buktiUrl, cleanNote, kegiatanText };
   }
 
   function renderBuktiCell(row) {
@@ -98,21 +109,27 @@
       parts.push(`<img class="thumb" src="${url}" alt="Foto pulang" data-photo="${esc(row.foto_pulang)}">`);
     }
     if (buktiUrl) {
-      parts.push(`<a class="proof-link" href="${esc(buktiUrl)}" target="_blank" rel="noopener noreferrer">Lihat Foto Bukti ↗</a>`);
+      parts.push(`<a class="proof-link" href="${esc(buktiUrl)}" target="_blank" rel="noopener noreferrer">Lihat Foto Bukti</a>`);
     }
     return parts.length ? parts.join(' ') : '<span class="muted small">—</span>';
   }
 
-  function renderCatatanCell(row) {
-    const { shiftLabel, cleanNote } = parseCatatanBukti(row);
+  function renderModeKegiatanCell(row) {
+    const { shiftLabel, cleanNote, kegiatanText } = parseCatatanBukti(row);
     const bits = [];
+    if (row.mode) {
+      bits.push(modeBadge(row.mode));
+    }
+    if (kegiatanText) {
+      bits.push(`<span>${esc(kegiatanText)}</span>`);
+    }
     if (shiftLabel) {
       bits.push(`<span class="shift-tag">${esc(shiftLabel)}</span>`);
     }
-    if (cleanNote) {
-      bits.push(`<span>${esc(cleanNote)}</span>`);
+    if (cleanNote && cleanNote !== kegiatanText) {
+      bits.push(`<span class="muted small">${esc(cleanNote)}</span>`);
     }
-    return bits.length ? bits.join(' ') : '<span class="muted small">—</span>';
+    return bits.length ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px">${bits.join('')}</div>` : '<span class="muted small">—</span>';
   }
 
   function toast(msg, type = 'ok') {
@@ -165,24 +182,29 @@
     db: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/>',
     users: '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M17 4a4 4 0 0 1 0 8M22 21c0-3-1.5-5-4-5.5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
-    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    building: '<path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01"/>',
+    laptop: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    mapPin: '<path d="M12 21s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'
   };
 
-  function ico(name) {
-    return `<svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
+  function ico(name, size = 18) {
+    return `<svg class="ico" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
   }
 
-  // ---------------- Menu Navigasi (Bahasa Mudah Dipahami) ----------------
+  // ---------------- Menu Navigasi Korporat ----------------
   const ROUTES = {
-    beranda: { label: 'Absen Saya', roles: ['karyawan'], icon: 'home', render: viewBeranda },
-    dasbor: { label: 'Beranda', roles: ['admin', 'atasan'], icon: 'dash', render: viewDasbor },
-    harian: { label: 'Absen Hari Ini', roles: ['admin', 'atasan'], icon: 'clock', render: viewHarian },
-    rekap: { label: 'Rekap Bulanan', roles: ['admin', 'atasan'], icon: 'chart', render: viewRekap },
-    axel: { label: 'Riwayat Absen', roles: ['admin', 'atasan'], icon: 'db', render: viewAxel },
-    kmeans: { label: 'Penilaian Disiplin', roles: ['admin', 'atasan'], icon: 'nodes', render: viewKmeans },
-    izin: { label: 'Catat Izin / Sakit', roles: ['karyawan', 'admin', 'atasan'], icon: 'cal', render: viewIzin },
-    karyawan: { label: 'Daftar Karyawan', roles: ['admin'], icon: 'users', render: viewKaryawan },
-    pengaturan: { label: 'Pengaturan Kantor', roles: ['admin'], icon: 'gear', render: viewPengaturan }
+    beranda: { label: 'Absen Saya', group: 'Ruang Kerja', roles: ['karyawan'], icon: 'home', render: viewBeranda },
+    dasbor: { label: 'Beranda', group: 'Pemantauan', roles: ['admin', 'atasan'], icon: 'dash', render: viewDasbor },
+    harian: { label: 'Absen Hari Ini', group: 'Pemantauan', roles: ['admin', 'atasan'], icon: 'clock', render: viewHarian },
+    rekap: { label: 'Rekap Bulanan', group: 'Laporan & Analitik', roles: ['admin', 'atasan'], icon: 'chart', render: viewRekap },
+    axel: { label: 'Riwayat Absen', group: 'Laporan & Analitik', roles: ['admin', 'atasan'], icon: 'db', render: viewAxel },
+    kmeans: { label: 'Penilaian Disiplin', group: 'Laporan & Analitik', roles: ['admin', 'atasan'], icon: 'nodes', render: viewKmeans },
+    izin: { label: 'Izin / Sakit', group: 'Pengelolaan', roles: ['karyawan', 'admin', 'atasan'], icon: 'cal', render: viewIzin },
+    karyawan: { label: 'Daftar Karyawan', group: 'Administrasi', roles: ['admin'], icon: 'users', render: viewKaryawan },
+    pengaturan: { label: 'Pengaturan Kantor', group: 'Administrasi', roles: ['admin'], icon: 'gear', render: viewPengaturan }
   };
 
   function allowedRoutes() {
@@ -191,9 +213,14 @@
 
   function renderNav() {
     const items = allowedRoutes();
-    byId('nav-desktop').innerHTML = items.map(([key, r]) =>
-      `<button data-route="${key}" class="${state.route === key ? 'active' : ''}">${ico(r.icon)}<span>${r.label}</span></button>`
-    ).join('');
+    let lastGroup = '';
+    const desktopHtml = items.map(([key, r]) => {
+      const grp = state.user.peran === 'karyawan' ? 'Ruang Kerja' : r.group;
+      const head = grp !== lastGroup ? `<div class="nav-group-label">${esc(grp)}</div>` : '';
+      lastGroup = grp;
+      return `${head}<button data-route="${key}" class="${state.route === key ? 'active' : ''}">${ico(r.icon)}<span>${r.label}</span></button>`;
+    }).join('');
+    byId('nav-desktop').innerHTML = desktopHtml;
     const tabs = items.slice(0, 5);
     byId('nav-mobile').innerHTML = tabs.map(([key, r]) =>
       `<button data-route="${key}" class="${state.route === key ? 'active' : ''}">${ico(r.icon)}<span>${r.label}</span></button>`
@@ -221,7 +248,7 @@
     return `<div class="page-head"><div><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="toolbar">${right}</div></div>`;
   }
 
-  // ---------------- Absen Saya (Karyawan) ----------------
+  // ---------------- Absen Saya (Karyawan WFO & WFH) ----------------
   async function viewBeranda(view) {
     const res = await Api.get('absensi.today');
     const d = res.data;
@@ -230,44 +257,125 @@
     const sapaan = now.getHours() < 11 ? 'Selamat pagi' : now.getHours() < 15 ? 'Selamat siang' : now.getHours() < 19 ? 'Selamat sore' : 'Selamat malam';
 
     const stateAbsen = !rec.jam_masuk ? 'in' : (!rec.jam_pulang ? 'out' : 'done');
-    const btnLabel = stateAbsen === 'in' ? 'Absen Masuk Sekarang' : stateAbsen === 'out' ? 'Absen Pulang Sekarang' : 'Sudah Absen Hari Ini';
-    const btnHint = stateAbsen === 'in'
-      ? 'Klik tombol di atas untuk memindai QR kantor dan mengambil foto'
-      : stateAbsen === 'out' ? 'Jangan lupa klik tombol di atas saat jam pulang' : `Masuk jam ${fmtJam(rec.jam_masuk)} · Pulang jam ${fmtJam(rec.jam_pulang)}`;
+    const activeMode = (rec.mode || 'wfo').toLowerCase() === 'wfh' ? 'wfh' : 'wfo';
+    let selectedMode = stateAbsen === 'in' ? 'wfo' : activeMode;
+
+    const btnLabel = stateAbsen === 'in' ? 'Absen Masuk Sekarang' : stateAbsen === 'out' ? 'Absen Pulang Sekarang' : 'Presensi Hari Ini Selesai';
+    const wfoRuleHint = [
+      d.wajib_barcode ? 'Scan QR kantor' : null,
+      d.wajib_foto ? 'foto kehadiran' : null,
+      d.radius_masuk_m > 0 ? `area kantor maks ${d.radius_masuk_m} m` : (d.wajib_gps ? 'GPS aktif' : null)
+    ].filter(Boolean).join(', ') || 'konfirmasi langsung';
+    const wfhRuleHint = `Tanpa QR kantor, ${d.wajib_foto ? 'foto kehadiran, ' : ''}wajib isi catatan kegiatan`;
 
     view.innerHTML = `
-      ${pageHead(`${sapaan}, ${esc(state.user.nama.split(' ')[0])}`, fmtTanggal(d.tanggal))}
+      ${pageHead(`${sapaan}, ${esc(state.user.nama.split(' ')[0])}`, `${esc(state.user.tim || 'Karyawan')} · ${fmtTanggal(d.tanggal)}`)}
       <div class="stack">
-        <div class="glass card clock-card">
-          <div class="clock-time tabular" id="clock">--:--:--</div>
-          <div class="clock-date">${d.hari_kerja ? `Jam Kerja ${esc(d.jam_masuk_jadwal)}–${esc(d.jam_pulang_jadwal)} · Batas terlambat ${d.toleransi_menit} menit` : 'Hari ini libur / bukan hari kerja'}</div>
-          ${(d.wajib_gps || d.radius_masuk_m > 0) ? `<div class="clock-date">${d.radius_masuk_m > 0 ? `Harus berada di sekitar kantor (maksimal ${d.radius_masuk_m} meter)` : 'Lokasi GPS harus aktif saat absen'}</div>` : ''}
-          <div class="absen-actions">
-            <button class="btn ${stateAbsen === 'done' ? 'btn-secondary' : 'btn-primary'} btn-lg big-cta" id="absen-btn" ${stateAbsen === 'done' ? 'disabled' : ''}>
-              ${stateAbsen === 'in' ? ico('clock') : ''}${btnLabel}
-            </button>
-            <p class="muted small">${esc(btnHint)}</p>
-          </div>
-        </div>
+        <div class="beranda-grid">
+          <div class="glass card clock-card">
+            <div class="clock-header">
+              <div>
+                <div class="small muted" style="font-weight:600">Waktu Lokal (WIB)</div>
+                <div class="clock-time tabular" id="clock">--:--:--</div>
+              </div>
+              <div style="text-align:right">
+                <div class="pill-note">${d.hari_kerja ? `Jam Kantor ${esc(d.jam_masuk_jadwal)}–${esc(d.jam_pulang_jadwal)}` : 'Hari Libur Kantor'}</div>
+                <div class="clock-date" style="margin-top:4px">Batas toleransi ${d.toleransi_menit} menit</div>
+              </div>
+            </div>
 
-        <div class="mini-stats">
-          <div class="glass mini-stat"><div class="value" style="color:var(--status-hadir)">${res.ringkasan.hadir}</div><div class="label">Hadir Tepat Waktu</div></div>
-          <div class="glass mini-stat"><div class="value" style="color:var(--status-terlambat)">${res.ringkasan.terlambat}</div><div class="label">Terlambat Bulan Ini</div></div>
-          <div class="glass mini-stat"><div class="value" style="color:var(--status-alpa)">${res.ringkasan.tidak_hadir}</div><div class="label">Tidak Masuk</div></div>
+            ${stateAbsen === 'in' ? `
+              <div class="field">
+                <span>Pilih Mode Kerja Hari Ini</span>
+                <div class="mode-switch" id="beranda-mode-switch">
+                  <button type="button" class="mode-opt active" data-mode="wfo">
+                    ${ico('building', 18)}
+                    <div>
+                      <span class="mode-opt-title">Di Kantor (WFO)</span>
+                      <span class="mode-opt-desc">Hadir langsung di kantor</span>
+                    </div>
+                  </button>
+                  <button type="button" class="mode-opt" data-mode="wfh">
+                    ${ico('laptop', 18)}
+                    <div>
+                      <span class="mode-opt-title">Work From Home (WFH)</span>
+                      <span class="mode-opt-desc">Kerja jarak jauh + kegiatan</span>
+                    </div>
+                  </button>
+                </div>
+                <div class="muted small" id="mode-hint" style="margin-top:4px">Syarat WFO: ${esc(wfoRuleHint)}.</div>
+              </div>
+              <label class="field">
+                <span id="kegiatan-label">Rencana / Catatan Kegiatan (Opsional untuk WFO)</span>
+                <textarea id="beranda-kegiatan" placeholder="Contoh: Review laporan keuangan bulanan dan sinkronisasi tim"></textarea>
+              </label>
+            ` : stateAbsen === 'out' ? `
+              <div class="activity-box" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                <span>Anda sudah absen masuk jam <b>${fmtJam(rec.jam_masuk)}</b></span>
+                ${modeBadge(activeMode)}
+              </div>
+              <label class="field">
+                <span>Ringkasan Kegiatan Hari Ini ${activeMode === 'wfh' ? '(Wajib diisi untuk WFH)' : '(Opsional)'}</span>
+                <textarea id="beranda-kegiatan" placeholder="Tuliskan pekerjaan yang diselesaikan hari ini">${esc(rec.kegiatan || '')}</textarea>
+              </label>
+            ` : `
+              <div class="alert alert-ok" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                <span>Masuk jam <b>${fmtJam(rec.jam_masuk)}</b> · Pulang jam <b>${fmtJam(rec.jam_pulang)}</b></span>
+                ${modeBadge(activeMode)}
+              </div>
+              ${rec.kegiatan ? `<div class="activity-box"><div class="small muted" style="font-weight:600;margin-bottom:3px">Catatan Kegiatan</div>${esc(rec.kegiatan)}</div>` : ''}
+            `}
+
+            <div class="absen-actions">
+              <button class="btn ${stateAbsen === 'done' ? 'btn-secondary' : 'btn-primary'} btn-lg big-cta" id="absen-btn" ${stateAbsen === 'done' ? 'disabled' : ''}>
+                ${stateAbsen === 'done' ? btnLabel : `${ico('clock')} ${btnLabel}`}
+              </button>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="glass card">
+              <div class="card-head">
+                <h2>Status Kehadiran Hari Ini</h2>
+                ${rec.status ? badge(rec.status) : '<span class="badge badge-netral">Belum Absen</span>'}
+              </div>
+              <div class="today-summary-list">
+                <div class="today-summary-item">
+                  <span class="muted">Mode Kerja</span>
+                  <span>${rec.jam_masuk ? modeBadge(activeMode) : '<span class="muted small">Belum dipilih</span>'}</span>
+                </div>
+                <div class="today-summary-item">
+                  <span class="muted">Jam Masuk</span>
+                  <span class="tabular" style="font-weight:700">${fmtJam(rec.jam_masuk)}</span>
+                </div>
+                <div class="today-summary-item">
+                  <span class="muted">Jam Pulang</span>
+                  <span class="tabular" style="font-weight:700">${fmtJam(rec.jam_pulang)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mini-stats">
+              <div class="glass mini-stat"><div class="value" style="color:var(--status-hadir)">${res.ringkasan.hadir}</div><div class="label">Tepat Waktu</div></div>
+              <div class="glass mini-stat"><div class="value" style="color:var(--status-terlambat)">${res.ringkasan.terlambat}</div><div class="label">Terlambat</div></div>
+              <div class="glass mini-stat"><div class="value" style="color:var(--status-alpa)">${res.ringkasan.tidak_hadir}</div><div class="label">Izin / Alpa</div></div>
+            </div>
+          </div>
         </div>
 
         <div class="glass card">
-          <div class="card-head"><h2>Absen 7 Hari Terakhir</h2><span class="pill-note">${res.riwayat.length} hari</span></div>
-          <div class="riwayat">
-            ${res.riwayat.length ? res.riwayat.map((r) => `
-              <div class="riwayat-row">
-                <div>
-                  <div class="t">${fmtTanggal(r.tanggal)}</div>
-                  <div class="s">${r.jam_masuk ? `Masuk ${fmtJam(r.jam_masuk)} → Pulang ${fmtJam(r.jam_pulang)}` : (r.catatan || '—')}</div>
-                </div>
-                ${badge(r.status)}
-              </div>`).join('') : '<p class="muted small">Belum ada catatan absen.</p>'}
-          </div>
+          <div class="card-head"><h2>Riwayat Presensi 7 Hari Terakhir</h2><span class="pill-note">${res.riwayat.length} hari</span></div>
+          ${res.riwayat.length ? `<div class="table-wrap"><table>
+            <thead><tr><th>Tanggal</th><th>Mode</th><th>Masuk</th><th>Pulang</th><th>Catatan Kegiatan</th><th>Status</th></tr></thead>
+            <tbody>${res.riwayat.map((r) => `<tr>
+              <td>${fmtTanggal(r.tanggal)}</td>
+              <td>${modeBadge(r.mode)}</td>
+              <td class="tabular">${fmtJam(r.jam_masuk)}</td>
+              <td class="tabular">${fmtJam(r.jam_pulang)}</td>
+              <td class="wrap">${esc(r.kegiatan || r.catatan || '—')}</td>
+              <td>${badge(r.status)}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : '<p class="muted small">Belum ada catatan absen.</p>'}
         </div>
       </div>`;
 
@@ -279,12 +387,34 @@
     tick();
     const timer = setInterval(() => { if (!document.body.contains(clock)) clearInterval(timer); else tick(); }, 1000);
 
+    const modeSwitch = byId('beranda-mode-switch');
+    if (modeSwitch) {
+      modeSwitch.querySelectorAll('[data-mode]').forEach((mBtn) => {
+        mBtn.addEventListener('click', () => {
+          selectedMode = mBtn.dataset.mode === 'wfh' ? 'wfh' : 'wfo';
+          modeSwitch.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b === mBtn));
+          byId('mode-hint').textContent = selectedMode === 'wfh' ? `Syarat WFH: ${wfhRuleHint}.` : `Syarat WFO: ${wfoRuleHint}.`;
+          byId('kegiatan-label').textContent = selectedMode === 'wfh'
+            ? 'Rencana / Catatan Kegiatan Hari Ini (Wajib untuk WFH)'
+            : 'Rencana / Catatan Kegiatan (Opsional untuk WFO)';
+        });
+      });
+    }
+
     const btn = byId('absen-btn');
     if (stateAbsen === 'in' || stateAbsen === 'out') {
       btn.addEventListener('click', async () => {
+        const kegiatanVal = (byId('beranda-kegiatan')?.value || '').trim();
+        const modeUsed = stateAbsen === 'in' ? selectedMode : activeMode;
+        if (modeUsed === 'wfh' && kegiatanVal.length < 3) {
+          toast('Mohon isi catatan kegiatan minimal 3 karakter untuk absen WFH.', 'err');
+          byId('beranda-kegiatan')?.focus();
+          return;
+        }
         btn.disabled = true;
         try {
           const shot = await Scanner.open({
+            mode: modeUsed,
             wajibBarcode: d.wajib_barcode,
             wajibFoto: d.wajib_foto,
             wajibGps: d.wajib_gps,
@@ -292,10 +422,12 @@
             latKantor: d.lat_kantor,
             lngKantor: d.lng_kantor,
             kodeLokasi: d.kode_lokasi,
-            title: stateAbsen === 'in' ? 'Absen Masuk' : 'Absen Pulang'
+            title: `${stateAbsen === 'in' ? 'Absen Masuk' : 'Absen Pulang'} (${modeUsed.toUpperCase()})`
           });
           const action = stateAbsen === 'in' ? 'absensi.checkin' : 'absensi.checkout';
           const payload = {
+            mode: modeUsed,
+            kegiatan: kegiatanVal,
             barcode: shot.barcode,
             foto: shot.foto,
             palsu: !!shot.palsu
@@ -321,10 +453,22 @@
     const { data } = await Api.get('dashboard');
     const h = data.hari_ini;
     const totalKaryawan = Number(h.total_karyawan || 0);
-    const totalHadirHariIni = Number(h.hadir || 0) + Number(h.terlambat || 0);
+    const jmlTepat = Number(h.hadir || 0);
+    const jmlTerlambat = Number(h.terlambat || 0);
+    const jmlIzinSakit = Number(h.izin || 0) + Number(h.sakit || 0);
+    const jmlBelum = Number(h.belum || 0) + Number(h.alpa || 0);
+    const totalHadirHariIni = jmlTepat + jmlTerlambat;
     const pctHadir = totalKaryawan > 0 ? Math.round((totalHadirHariIni / totalKaryawan) * 100) : 0;
 
-    // Pastikan seluruh 30 hari kalender terakhir ada di daftar (termasuk bila ada hari dengan 0 kehadiran)
+    // Hari kerja aktif (1=Senin .. 7=Minggu)
+    const hariKerjaSet = new Set(String(state.org.hari_kerja || '1,2,3,4,5').split(',').map((x) => Number(x.trim())));
+    const isWorkday = (iso) => {
+      const d = new Date(iso + 'T00:00:00');
+      const dow = d.getDay() === 0 ? 7 : d.getDay();
+      return hariKerjaSet.has(dow);
+    };
+
+    // Data 30 hari kalender terakhir
     const mapTren = {};
     (data.tren || []).forEach((t) => { mapTren[t.tanggal] = t; });
     const full30Days = [];
@@ -334,17 +478,51 @@
       const iso = todayISO(d);
       const row = mapTren[iso] || { tanggal: iso, hadir: 0, terlambat: 0, izin_sakit: 0, alpa: 0 };
       const totalMasuk = Number(row.hadir || 0);
-      const jmlTerlambat = Number(row.terlambat || 0);
-      const jmlTepat = Math.max(0, totalMasuk - jmlTerlambat);
+      const terlambat = Number(row.terlambat || 0);
+      const tepat = Math.max(0, totalMasuk - terlambat);
       full30Days.push({
         tanggal: iso,
         hadir: totalMasuk,
-        tepat: jmlTepat,
-        terlambat: jmlTerlambat,
+        tepat,
+        terlambat,
         izin_sakit: Number(row.izin_sakit || 0),
-        alpa: Number(row.alpa || 0)
+        alpa: Number(row.alpa || 0),
+        kerja: isWorkday(iso)
       });
     }
+
+    // Donut SVG sederhana untuk Komposisi Hari Ini
+    function buildDonutSvg() {
+      const r = 64;
+      const circ = 2 * Math.PI * r;
+      if (totalKaryawan <= 0) {
+        return `<svg class="donut-svg" viewBox="0 0 160 160">
+          <circle cx="80" cy="80" r="${r}" fill="none" stroke="var(--line)" stroke-width="20"></circle>
+        </svg>`;
+      }
+      const segments = [
+        { val: jmlTepat, color: '#16a34a' },
+        { val: jmlTerlambat, color: '#f59e0b' },
+        { val: jmlIzinSakit, color: '#0284c7' },
+        { val: jmlBelum, color: '#94a3b8' }
+      ].filter((s) => s.val > 0);
+
+      let offset = 0;
+      const circles = segments.map((s) => {
+        const len = (s.val / totalKaryawan) * circ;
+        const dash = `${len.toFixed(2)} ${(circ - len).toFixed(2)}`;
+        const segEl = `<circle cx="80" cy="80" r="${r}" fill="none" stroke="${s.color}" stroke-width="20" stroke-dasharray="${dash}" stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="butt"></circle>`;
+        offset += len;
+        return segEl;
+      }).join('');
+
+      return `<svg class="donut-svg" viewBox="0 0 160 160">
+        <circle cx="80" cy="80" r="${r}" fill="none" stroke="var(--line)" stroke-width="20"></circle>
+        ${circles}
+      </svg>`;
+    }
+
+    const pctOf = (n) => (totalKaryawan > 0 ? Math.round((n / totalKaryawan) * 100) : 0);
 
     view.innerHTML = `
       ${pageHead('Beranda', `Ringkasan kehadiran karyawan ${esc(state.org.nama)} hari ini (${fmtTanggal(todayISO())})`, `
@@ -356,52 +534,91 @@
           <div class="glass card metric accent-hadir">
             <div class="label">Sudah Masuk Hari Ini</div>
             <div class="value">${totalHadirHariIni} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">dari ${totalKaryawan} orang</span></div>
-            <div class="sublabel">${pctHadir}% karyawan sudah absen</div>
+            <div class="sublabel">${pctHadir}% hadir · WFO: ${h.wfo || 0} · WFH: ${h.wfh || 0}</div>
           </div>
           <div class="glass card metric accent-terlambat">
             <div class="label">Datang Terlambat</div>
-            <div class="value">${h.terlambat} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="value">${jmlTerlambat} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
             <div class="sublabel">Lewat batas toleransi ${state.org.toleransi_menit} menit</div>
           </div>
           <div class="glass card metric accent-izin">
             <div class="label">Izin / Sakit</div>
-            <div class="value">${Number(h.izin || 0) + Number(h.sakit || 0)} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="value">${jmlIzinSakit} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
             <div class="sublabel">Izin: ${h.izin || 0} · Sakit: ${h.sakit || 0}</div>
           </div>
           <div class="glass card metric accent-alpa">
             <div class="label">Belum Absen</div>
-            <div class="value">${Number(h.belum || 0) + Number(h.alpa || 0)} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
+            <div class="value">${jmlBelum} <span style="font-size:14px;font-weight:500;color:var(--text-muted)">orang</span></div>
             <div class="sublabel">Belum absen: ${h.belum} · Tidak masuk: ${h.alpa}</div>
           </div>
         </div>
 
-        <div class="glass card">
-          <div class="card-head" style="flex-wrap:wrap">
-            <div>
-              <h2 id="trend-title">Grafik Kehadiran 30 Hari Terakhir</h2>
-              <p class="muted small">Klik salah satu batang tanggal untuk melihat rincian jumlah yang tepat waktu, terlambat, dan daftar namanya</p>
+        <div class="dash-charts-grid">
+          <div class="glass card">
+            <div class="card-head">
+              <div>
+                <h2>Ringkasan Hari Ini</h2>
+                <p class="muted small">Pembagian status seluruh karyawan</p>
+              </div>
+              <span class="pill-note">${totalKaryawan} orang</span>
             </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              <button class="btn btn-secondary btn-sm" data-range="7">7 Hari</button>
-              <button class="btn btn-secondary btn-sm" data-range="14">14 Hari</button>
-              <button class="btn btn-primary btn-sm" data-range="30">30 Hari</button>
+            <div class="donut-layout">
+              <div class="donut-box">
+                ${buildDonutSvg()}
+                <div class="donut-center">
+                  <div class="donut-pct">${pctHadir}%</div>
+                  <div class="donut-sub">Sudah Masuk</div>
+                </div>
+              </div>
+              <div class="donut-legend">
+                <div class="donut-row">
+                  <span class="donut-row-l"><i class="donut-dot" style="background:#16a34a"></i>Tepat Waktu</span>
+                  <span class="donut-row-r">${jmlTepat} org <span>(${pctOf(jmlTepat)}%)</span></span>
+                </div>
+                <div class="donut-row">
+                  <span class="donut-row-l"><i class="donut-dot" style="background:#f59e0b"></i>Terlambat</span>
+                  <span class="donut-row-r">${jmlTerlambat} org <span>(${pctOf(jmlTerlambat)}%)</span></span>
+                </div>
+                <div class="donut-row">
+                  <span class="donut-row-l"><i class="donut-dot" style="background:#0284c7"></i>Izin / Sakit</span>
+                  <span class="donut-row-r">${jmlIzinSakit} org <span>(${pctOf(jmlIzinSakit)}%)</span></span>
+                </div>
+                <div class="donut-row">
+                  <span class="donut-row-l"><i class="donut-dot" style="background:#94a3b8"></i>Belum Absen</span>
+                  <span class="donut-row-r">${jmlBelum} org <span>(${pctOf(jmlBelum)}%)</span></span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="trend-summary-strip" id="trend-summary"></div>
+          <div class="glass card">
+            <div class="card-head" style="flex-wrap:wrap">
+              <div>
+                <h2 id="trend-title">Kehadiran 7 Hari Terakhir</h2>
+                <p class="muted small">Klik batang tanggal untuk melihat rincian &amp; daftar nama</p>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="btn btn-primary btn-sm" data-range="7">7 Hari</button>
+                <button class="btn btn-secondary btn-sm" data-range="14">14 Hari</button>
+                <button class="btn btn-secondary btn-sm" data-range="30">30 Hari</button>
+              </div>
+            </div>
 
-          <div class="trend-chart-wrap">
-            <div class="trend-yaxis" id="trend-yaxis"></div>
-            <div class="bars" id="trend-bars"></div>
+            <div class="trend-summary-pills" id="trend-summary"></div>
+
+            <div class="trend-chart-wrap">
+              <div class="trend-yaxis" id="trend-yaxis"></div>
+              <div class="bars" id="trend-bars"></div>
+            </div>
+
+            <div class="bar-legend">
+              <span><i class="legend-dot" style="background:#16a34a"></i>Hijau = Tepat Waktu</span>
+              <span><i class="legend-dot" style="background:#f59e0b"></i>Kuning = Terlambat</span>
+              <span><i class="legend-dot" style="background:var(--line)"></i>Abu-abu = Hari Libur</span>
+            </div>
+
+            <div class="trend-detail-bar" id="trend-detail"></div>
           </div>
-
-          <div class="bar-legend">
-            <span><i class="legend-dot" style="background:#16a34a"></i>Hijau = Hadir Tepat Waktu</span>
-            <span><i class="legend-dot" style="background:#f59e0b"></i>Kuning = Datang Terlambat</span>
-            <span class="muted small" style="margin-left:auto">Angka di atas batang = Total karyawan yang masuk pada tanggal tersebut</span>
-          </div>
-
-          <div class="trend-detail-bar" id="trend-detail"></div>
         </div>
 
         <div class="glass card">
@@ -425,7 +642,7 @@
         </div>
       </div>`;
 
-    let activeRange = 30;
+    let activeRange = 7;
     let selectedDate = todayISO();
 
     function renderTrendChart() {
@@ -434,65 +651,55 @@
         selectedDate = slice[slice.length - 1].tanggal;
       }
 
-      byId('trend-title').textContent = `Grafik Kehadiran ${activeRange} Hari Terakhir`;
+      byId('trend-title').textContent = `Kehadiran ${activeRange} Hari Terakhir`;
 
+      const workSlice = slice.filter((d) => d.kerja || d.hadir > 0);
+      const denomDays = workSlice.length || slice.length || 1;
       const sumHadir = slice.reduce((a, b) => a + b.hadir, 0);
       const sumTepat = slice.reduce((a, b) => a + b.tepat, 0);
-      const sumLate = slice.reduce((a, b) => a + b.terlambat, 0);
-      const avgHadir = slice.length ? (sumHadir / slice.length).toFixed(1) : '0';
+      const avgHadir = (sumHadir / denomDays).toFixed(1);
       const pctTepat = sumHadir > 0 ? Math.round((sumTepat / sumHadir) * 100) : 0;
-      const pctLate = sumHadir > 0 ? (100 - pctTepat) : 0;
-      const bestDay = slice.reduce((best, cur) => (cur.hadir > (best?.hadir ?? -1) ? cur : best), slice[0]);
 
       byId('trend-summary').innerHTML = `
-        <div class="trend-stat-box">
-          <div class="ts-label">Rata-rata Masuk per Hari</div>
-          <div class="ts-val">${avgHadir} orang <span class="muted small" style="font-weight:500">/ ${totalKaryawan}</span></div>
-        </div>
-        <div class="trend-stat-box">
-          <div class="ts-label">Hadir Tepat Waktu</div>
-          <div class="ts-val" style="color:var(--status-hadir)">${sumTepat} kali <span class="muted small" style="font-weight:500">(${pctTepat}%)</span></div>
-        </div>
-        <div class="trend-stat-box">
-          <div class="ts-label">Datang Terlambat</div>
-          <div class="ts-val" style="color:var(--status-terlambat)">${sumLate} kali <span class="muted small" style="font-weight:500">(${pctLate}%)</span></div>
-        </div>
-        <div class="trend-stat-box">
-          <div class="ts-label">Kehadiran Tertinggi</div>
-          <div class="ts-val">${bestDay ? `${bestDay.hadir} orang` : '—'} <span class="muted small" style="font-weight:500">${bestDay ? `(${fmtTanggal(bestDay.tanggal).split(',')[1]?.trim() || bestDay.tanggal})` : ''}</span></div>
-        </div>`;
+        <span class="trend-pill">Rata-rata masuk: <b>${avgHadir} dari ${totalKaryawan} org/hari</b></span>
+        <span class="trend-pill">Ketepatan waktu: <b style="color:var(--status-hadir)">${pctTepat}%</b></span>`;
 
       const maxScale = Math.max(totalKaryawan, ...slice.map((t) => t.hadir), 4);
       const midScale = Math.round(maxScale / 2);
       byId('trend-yaxis').innerHTML = `
-        <span>${maxScale} org</span>
-        <span>${midScale} org</span>
+        <span>${maxScale}</span>
+        <span>${midScale}</span>
         <span>0</span>`;
 
-      byId('trend-bars').innerHTML = slice.map((t, idx) => {
-        const totalPct = Math.max(t.hadir > 0 ? 8 : 2, Math.round((t.hadir / maxScale) * 100));
+      const barsEl = byId('trend-bars');
+      barsEl.className = activeRange >= 30 ? 'bars bars-dense' : 'bars';
+      barsEl.innerHTML = slice.map((t, idx) => {
+        const isHoliday = !t.kerja && t.hadir === 0;
+        const totalPct = isHoliday ? 6 : Math.max(t.hadir > 0 ? 10 : 3, Math.round((t.hadir / maxScale) * 100));
         const latePct = t.hadir > 0 ? Math.round((t.terlambat / t.hadir) * 100) : 0;
         const ontimePct = 100 - latePct;
         const dObj = new Date(t.tanggal + 'T00:00:00');
         const tglNum = dObj.getDate();
-        const blnStr = BLN[dObj.getMonth()];
-        const showMonth = idx === 0 || tglNum === 1 || activeRange <= 14;
-        const lbl = showMonth ? `${tglNum} ${blnStr}` : `${tglNum}`;
+        const hariStr = HARI_PENDEK[dObj.getDay()];
+        const isToday = t.tanggal === todayISO();
+        const lbl = activeRange <= 7
+          ? (isToday ? 'Hari Ini' : `${hariStr} ${tglNum}`)
+          : (activeRange <= 14 ? `${tglNum} ${BLN[dObj.getMonth()]}` : (idx === 0 || tglNum === 1 ? `${tglNum} ${BLN[dObj.getMonth()]}` : `${tglNum}`));
         const isActive = t.tanggal === selectedDate;
 
-        return `<div class="bar-col ${isActive ? 'active' : ''}" data-date="${t.tanggal}" title="${fmtTanggal(t.tanggal)}: ${t.hadir} masuk (${t.tepat} tepat waktu, ${t.terlambat} terlambat)">
-          <span class="bar-num">${t.hadir}</span>
+        return `<div class="bar-col ${isActive ? 'active' : ''} ${isHoliday ? 'is-holiday' : ''}" data-date="${t.tanggal}" title="${fmtTanggal(t.tanggal)}: ${isHoliday ? 'Hari Libur' : `${t.hadir} masuk (${t.tepat} tepat waktu, ${t.terlambat} terlambat)`}">
+          <span class="bar-num">${isHoliday ? 'Libur' : t.hadir}</span>
           <div class="bar-track">
             <div class="bar-stack" style="height:${totalPct}%">
-              ${t.terlambat > 0 ? `<div class="bar-seg-late" style="height:${latePct}%"></div>` : ''}
-              ${t.tepat > 0 ? `<div class="bar-seg-ontime" style="height:${ontimePct}%"></div>` : ''}
+              ${!isHoliday && t.terlambat > 0 ? `<div class="bar-seg-late" style="height:${latePct}%"></div>` : ''}
+              ${!isHoliday && t.tepat > 0 ? `<div class="bar-seg-ontime" style="height:${ontimePct}%"></div>` : ''}
             </div>
           </div>
           <span class="bar-lbl">${lbl}</span>
         </div>`;
       }).join('');
 
-      byId('trend-bars').querySelectorAll('.bar-col').forEach((col) => {
+      barsEl.querySelectorAll('.bar-col').forEach((col) => {
         col.addEventListener('click', () => {
           selectedDate = col.dataset.date;
           renderTrendChart();
@@ -502,20 +709,23 @@
       const sel = slice.find((d) => d.tanggal === selectedDate) || slice[slice.length - 1];
       if (sel) {
         const tidakMasuk = Math.max(0, totalKaryawan - sel.hadir);
+        const isLibur = !sel.kerja && sel.hadir === 0;
         byId('trend-detail').innerHTML = `
           <div>
-            <div style="font-weight:700;font-size:14px;color:var(--text)">
-              Rincian Tanggal: ${fmtTanggal(sel.tanggal)}
+            <div style="font-weight:700;font-size:13.5px;color:var(--text)">
+              ${fmtTanggal(sel.tanggal)} ${isLibur ? '· <span class="muted">Hari Libur Kantor</span>' : ''}
             </div>
             <div class="small" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:12px">
-              <span>Total Masuk: <b>${sel.hadir} dari ${totalKaryawan} orang</b></span>
-              <span style="color:var(--status-hadir)">● Tepat Waktu: <b>${sel.tepat} orang</b></span>
-              <span style="color:var(--status-terlambat)">● Terlambat: <b>${sel.terlambat} orang</b></span>
-              <span class="muted">● Tidak Masuk / Libur Shift: <b>${tidakMasuk} orang</b></span>
+              ${isLibur
+                ? '<span class="muted">Tidak ada jadwal kerja kantor pada tanggal ini.</span>'
+                : `<span>Masuk: <b>${sel.hadir} dari ${totalKaryawan} orang</b></span>
+                   <span style="color:var(--status-hadir)">● Tepat Waktu: <b>${sel.tepat}</b></span>
+                   <span style="color:var(--status-terlambat)">● Terlambat: <b>${sel.terlambat}</b></span>
+                   <span class="muted">● Tidak Masuk: <b>${tidakMasuk}</b></span>`}
             </div>
           </div>
           <button class="btn btn-primary btn-sm" id="trend-open-date">
-            Lihat Daftar Nama Tanggal ${fmtTanggal(sel.tanggal).split(',')[1]?.trim() || sel.tanggal} →
+            Lihat Daftar Nama →
           </button>`;
 
         byId('trend-open-date')?.addEventListener('click', () => {
@@ -550,59 +760,87 @@
       <button class="btn btn-primary" id="harian-load">Lihat Data</button>`)}
       <div class="glass card" id="harian-box"><p class="muted">Sedang memuat data…</p></div>`;
 
-    async function load() {
-      const tgl = byId('harian-tgl').value || todayISO();
+    let allRows = [];
+    let currentTgl = initialDate;
+
+    function renderHarianTable() {
       const box = byId('harian-box');
-      const { data } = await Api.get('absensi.harian', { tanggal: tgl });
-      const hadirCount = data.filter((r) => r.status === 'hadir' || r.status === 'terlambat').length;
+      const q = (byId('harian-search')?.value || '').trim().toLowerCase();
+      const rows = q
+        ? allRows.filter((r) => (r.nama || '').toLowerCase().includes(q) || (r.tim || '').toLowerCase().includes(q))
+        : allRows;
+      const hadirCount = allRows.filter((r) => r.status === 'hadir' || r.status === 'terlambat').length;
+
+      const tbody = byId('harian-tbody');
+      if (tbody) {
+        tbody.innerHTML = rows.map((r, idx) => `<tr>
+          <td class="muted tabular">${idx + 1}</td>
+          <td>${empCell(r.nama)}</td>
+          <td>${esc(r.tim)}</td>
+          <td>${r.status ? badge(r.status) : '<span class="badge badge-netral">Belum Absen</span>'}</td>
+          <td class="tabular">${fmtJam(r.jam_masuk)}</td>
+          <td class="tabular">${fmtJam(r.jam_pulang)}</td>
+          <td class="wrap">${renderModeKegiatanCell(r)}</td>
+          <td>${renderBuktiCell(r)}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm"
+              data-koreksi="${r.id}"
+              data-nama="${esc(r.nama)}"
+              data-status="${r.status || 'hadir'}"
+              data-masuk="${r.jam_masuk ? r.jam_masuk.slice(0, 5) : ''}"
+              data-pulang="${r.jam_pulang ? r.jam_pulang.slice(0, 5) : ''}">
+              Ubah
+            </button>
+          </td>
+        </tr>`).join('') || '<tr><td colspan="9" class="muted">Tidak ada data karyawan sesuai pencarian.</td></tr>';
+        tbody.querySelectorAll('[data-koreksi]').forEach((b) =>
+          b.addEventListener('click', () => openKoreksi(b.dataset, currentTgl, load)));
+        tbody.querySelectorAll('[data-photo]').forEach((img) =>
+          img.addEventListener('click', () => viewPhoto(img.dataset.photo)));
+        return;
+      }
 
       box.innerHTML = `
-        <div class="card-head">
-          <h2>Daftar Kehadiran · ${fmtTanggal(tgl)}</h2>
-          <span class="pill-note">Sudah Masuk: ${hadirCount} dari ${data.length} orang</span>
+        <div class="card-head" style="flex-wrap:wrap">
+          <div>
+            <h2>Daftar Kehadiran · ${fmtTanggal(currentTgl)}</h2>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <input type="search" id="harian-search" placeholder="Cari nama atau divisi…" style="min-height:34px;width:210px">
+            <span class="pill-note">Sudah Masuk: ${hadirCount} dari ${allRows.length} orang</span>
+          </div>
         </div>
         <div class="table-wrap"><table>
           <thead>
             <tr>
               <th>No</th>
               <th>Nama Karyawan</th>
-              <th>Bagian / Shift</th>
+              <th>Divisi</th>
               <th>Status</th>
               <th>Jam Masuk</th>
               <th>Jam Pulang</th>
-              <th>Keterangan Shift</th>
+              <th>Mode &amp; Kegiatan</th>
               <th>Foto Bukti</th>
               <th>Ubah Data</th>
             </tr>
           </thead>
-          <tbody>
-            ${data.map((r, idx) => `<tr>
-              <td class="muted tabular">${idx + 1}</td>
-              <td>${empCell(r.nama)}</td>
-              <td>${esc(r.tim)}</td>
-              <td>${r.status ? badge(r.status) : '<span class="badge badge-netral">Belum Absen</span>'}</td>
-              <td class="tabular">${fmtJam(r.jam_masuk)}</td>
-              <td class="tabular">${fmtJam(r.jam_pulang)}</td>
-              <td class="wrap">${renderCatatanCell(r)}</td>
-              <td>${renderBuktiCell(r)}</td>
-              <td>
-                <button class="btn btn-secondary btn-sm"
-                  data-koreksi="${r.id}"
-                  data-nama="${esc(r.nama)}"
-                  data-status="${r.status || 'hadir'}"
-                  data-masuk="${r.jam_masuk ? r.jam_masuk.slice(0, 5) : ''}"
-                  data-pulang="${r.jam_pulang ? r.jam_pulang.slice(0, 5) : ''}">
-                  Ubah
-                </button>
-              </td>
-            </tr>`).join('') || '<tr><td colspan="9" class="muted">Belum ada data karyawan.</td></tr>'}
-          </tbody>
+          <tbody id="harian-tbody"></tbody>
         </table></div>`;
 
-      box.querySelectorAll('[data-koreksi]').forEach((b) =>
-        b.addEventListener('click', () => openKoreksi(b.dataset, tgl, load)));
-      box.querySelectorAll('[data-photo]').forEach((img) =>
-        img.addEventListener('click', () => viewPhoto(img.dataset.photo)));
+      byId('harian-search').addEventListener('input', renderHarianTable);
+      renderHarianTable();
+    }
+
+    async function load() {
+      currentTgl = byId('harian-tgl').value || todayISO();
+      const box = byId('harian-box');
+      if (!byId('harian-tbody')) {
+        box.innerHTML = '<p class="muted">Sedang memuat data…</p>';
+      }
+      const { data } = await Api.get('absensi.harian', { tanggal: currentTgl });
+      allRows = data || [];
+      box.innerHTML = '';
+      renderHarianTable();
     }
     byId('harian-load').addEventListener('click', load);
     byId('harian-tgl').addEventListener('change', load);
@@ -650,6 +888,7 @@
 
   // ---------------- Rekap Bulanan ----------------
   async function viewRekap(view) {
+    const curYear = new Date().getFullYear();
     const timList = (await Api.get('tim.list').catch(() => ({ data: [] }))).data;
     view.innerHTML = `
       ${pageHead('Rekap Bulanan', 'Total hari masuk, tidak masuk, dan rata-rata keterlambatan setiap karyawan', `
@@ -660,9 +899,9 @@
           <div class="toolbar">
             <label class="field"><span>Dari Tanggal</span><input type="date" id="r-dari" value="${firstOfMonthISO()}"></label>
             <label class="field"><span>Sampai Tanggal</span><input type="date" id="r-sampai" value="${endOfMonthISO()}"></label>
-            <label class="field"><span>Bagian / Shift</span><select id="r-tim"><option value="">Semua Shift</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
+            <label class="field"><span>Divisi</span><select id="r-tim"><option value="">Semua Divisi</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
             <button class="btn btn-primary" id="r-load">Tampilkan Rekap</button>
-            <button class="btn btn-ghost" id="r-all-year">Lihat Setahun Penuh (2026)</button>
+            <button class="btn btn-ghost" id="r-all-year">Lihat Setahun Penuh (${curYear})</button>
           </div>
         </div>
         <div class="glass card" id="r-box"><p class="muted">Sedang memuat data…</p></div>
@@ -670,17 +909,28 @@
 
     let rows = [];
     function columnsData() {
-      const cols = ['No', 'Nama Karyawan', 'Shift', 'Jumlah Hari Masuk', 'Tidak Masuk', 'Total Hari Kerja', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja'];
+      const cols = ['No', 'Nama Karyawan', 'Divisi', 'Jumlah Hari Masuk', 'Tidak Masuk', 'Total Hari Kerja', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja'];
       const data = rows.map((r, i) => [i + 1, r.nama, r.tim, r.hari_tercatat, r.hari_tidak_hadir, r.total_hari, r.rata_terlambat, r.persen_tidak_hadir + '%', r.rata_jam_kerja + ' jam']);
       return { cols, data };
     }
 
     async function load() {
+      const dari = byId('r-dari').value;
+      const sampai = byId('r-sampai').value;
+      if (dari && sampai && sampai < dari) {
+        toast('Tanggal selesai tidak boleh sebelum tanggal mulai.', 'err');
+        return;
+      }
       const box = byId('r-box');
-      const { data } = await Api.get('rekap', {
-        dari: byId('r-dari').value, sampai: byId('r-sampai').value, tim: byId('r-tim').value
-      });
-      rows = data;
+      try {
+        const { data } = await Api.get('rekap', {
+          dari, sampai, tim: byId('r-tim').value
+        });
+        rows = data;
+      } catch (e) {
+        toast(e.message, 'err');
+        return;
+      }
       const totHadir = rows.reduce((a, b) => a + Number(b.hari_tercatat || 0), 0);
       const avgLateAll = rows.length ? (rows.reduce((a, b) => a + Number(b.rata_terlambat || 0), 0) / rows.length).toFixed(1) : '0';
       const avgWorkAll = rows.length ? (rows.reduce((a, b) => a + Number(b.rata_jam_kerja || 0), 0) / rows.length).toFixed(1) : '0';
@@ -713,7 +963,7 @@
             <tr>
               <th>No</th>
               <th>Nama Karyawan</th>
-              <th>Bagian / Shift</th>
+              <th>Divisi</th>
               <th>Jumlah Masuk</th>
               <th>Tidak Masuk</th>
               <th>Rata-rata Terlambat</th>
@@ -735,17 +985,26 @@
     }
     byId('r-load').addEventListener('click', load);
     byId('r-all-year').addEventListener('click', () => {
-      byId('r-dari').value = '2026-01-01';
+      byId('r-dari').value = `${curYear}-01-01`;
       byId('r-sampai').value = todayISO();
       load();
     });
-    byId('rekap-csv').addEventListener('click', () => { const { cols, data } = columnsData(); exportCsv(`rekap-absen-${todayISO()}.csv`, cols, data); });
-    byId('rekap-xls').addEventListener('click', () => { const { cols, data } = columnsData(); exportExcel(`rekap-absen-${todayISO()}.xls`, `Rekap Kehadiran (${byId('r-dari').value} s/d ${byId('r-sampai').value})`, cols, data); });
+    byId('rekap-csv').addEventListener('click', () => {
+      if (!rows.length) { toast('Tidak ada data untuk diunduh', 'err'); return; }
+      const { cols, data } = columnsData();
+      exportCsv(`rekap-absen-${todayISO()}.csv`, cols, data);
+    });
+    byId('rekap-xls').addEventListener('click', () => {
+      if (!rows.length) { toast('Tidak ada data untuk diunduh', 'err'); return; }
+      const { cols, data } = columnsData();
+      exportExcel(`rekap-absen-${todayISO()}.xls`, `Rekap Kehadiran (${byId('r-dari').value} s/d ${byId('r-sampai').value})`, cols, data);
+    });
     await load();
   }
 
   // ---------------- Penilaian Disiplin (K-Means untuk Orang Awam) ----------------
   async function viewKmeans(view) {
+    const curYear = new Date().getFullYear();
     const [timRes, savedRes] = await Promise.all([
       Api.get('tim.list').catch(() => ({ data: [] })),
       Api.get('klaster.list').catch(() => ({ data: [] }))
@@ -761,9 +1020,9 @@
       <div class="stack">
         <div class="glass card">
           <div class="toolbar">
-            <label class="field"><span>Dari Tanggal</span><input type="date" id="k-dari" value="2026-01-01"></label>
+            <label class="field"><span>Dari Tanggal</span><input type="date" id="k-dari" value="${curYear}-01-01"></label>
             <label class="field"><span>Sampai Tanggal</span><input type="date" id="k-sampai" value="${todayISO()}"></label>
-            <label class="field"><span>Bagian / Shift</span><select id="k-tim"><option value="">Semua Shift</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
+            <label class="field"><span>Divisi</span><select id="k-tim"><option value="">Semua Divisi</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
             <label class="field"><span>Bagi Menjadi</span><select id="k-k">
               <option value="2">2 Kategori (Disiplin &amp; Perlu Diingatkan)</option>
               <option value="3" selected>3 Kategori (Disiplin, Cukup, Perlu Diingatkan)</option>
@@ -846,10 +1105,12 @@
     renderSavedHistory();
 
     function draw() {
+      if (!document.body.contains(canvas)) return;
       const ctx = canvas.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
       if (!rect.width) return;
+      const isDark = document.documentElement.dataset.theme === 'dark';
       const H = 340;
       canvas.width = rect.width * dpr;
       canvas.height = H * dpr;
@@ -860,8 +1121,8 @@
       const plotH = H - padT - padB;
       ctx.clearRect(0, 0, W, H);
 
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-      ctx.fillStyle = '#64748b';
+      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.25)';
+      ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
       ctx.font = '11px "Plus Jakarta Sans", sans-serif';
       ctx.lineWidth = 1;
 
@@ -891,7 +1152,7 @@
         ctx.fillText(xVal, gx, padT + plotH + 18);
       }
 
-      ctx.strokeStyle = 'rgba(100, 116, 139, 0.65)';
+      ctx.strokeStyle = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(100, 116, 139, 0.65)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(padL, padT);
@@ -899,7 +1160,7 @@
       ctx.lineTo(padL + plotW, padT + plotH);
       ctx.stroke();
 
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = isDark ? '#cbd5e1' : '#475569';
       ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Persentase Tidak Masuk (%) →', padL + plotW / 2, H - 8);
@@ -909,7 +1170,7 @@
       const labels = engine.state.labels;
       const res = engine.result();
       const ciColor = {};
-      res.forEach((r) => { ciColor[r.cluster] = r.color; });
+      res.forEach((r) => { ciColor[r.cluster] = isDark ? (r.darkColor || r.color) : r.color; });
       const colorFor = (ci) => ciColor[ci] || '#64748b';
 
       const px = (v) => padL + v * plotW;
@@ -922,12 +1183,12 @@
         ctx.arc(cx, cy, 7, 0, Math.PI * 2);
         ctx.fillStyle = col;
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
+        ctx.strokeStyle = isDark ? '#0f172a' : '#ffffff';
         ctx.lineWidth = 2;
         ctx.stroke();
 
         if (data[i]) {
-          ctx.fillStyle = '#1e293b';
+          ctx.fillStyle = isDark ? '#f1f5f9' : '#1e293b';
           ctx.font = '600 11px "Plus Jakarta Sans", sans-serif';
           ctx.textAlign = 'left';
           const shortName = data[i].nama.split(' ').slice(0, 2).join(' ');
@@ -969,7 +1230,7 @@
             <tr>
               <th>No</th>
               <th>Nama Karyawan</th>
-              <th>Bagian / Shift</th>
+              <th>Divisi</th>
               <th>Jumlah Masuk</th>
               <th>Rata-rata Terlambat</th>
               <th>Persentase Tidak Masuk</th>
@@ -1034,32 +1295,56 @@
     }
 
     async function loadAndRun() {
-      const res = await Api.get('kmeans.dataset', {
-        dari: byId('k-dari').value,
-        sampai: byId('k-sampai').value,
-        tim: byId('k-tim').value
-      });
+      const dari = byId('k-dari').value;
+      const sampai = byId('k-sampai').value;
+      if (dari && sampai && sampai < dari) {
+        toast('Tanggal selesai tidak boleh sebelum tanggal mulai.', 'err');
+        return false;
+      }
+      let res;
+      try {
+        res = await Api.get('kmeans.dataset', {
+          dari,
+          sampai,
+          tim: byId('k-tim').value
+        });
+      } catch (e) {
+        toast(e.message, 'err');
+        return false;
+      }
       data = res.data.filter((r) => r.eligible);
       ineligibleData = res.data.filter((r) => !r.eligible);
       const k = Number(byId('k-k').value);
       if (data.length < k) {
+        engine = null;
+        draw();
+        byId('k-hasil').innerHTML = '';
+        byId('k-emp-count').textContent = `${data.length} karyawan memenuhi syarat`;
+        byId('k-simpan').disabled = true;
+        byId('k-centroid-box').innerHTML = '';
+        byId('k-tech-table').innerHTML = '';
+        byId('k-detail-table').innerHTML = `<div style="padding:16px">
+          <div class="alert alert-error">Karyawan yang sudah masuk minimal 10 hari hanya <b>${data.length} orang</b> (dibutuhkan minimal <b>${k} orang</b> untuk dibagi menjadi ${k} kategori). Perluas rentang tanggal atau pilih jumlah kategori yang lebih sedikit.</div>
+          ${ineligibleData.length ? `<table style="margin-top:12px"><thead><tr><th>Nama Karyawan</th><th>Shift</th><th>Hari Masuk</th><th>Keterangan</th></tr></thead><tbody>${ineligibleData.map((u) => `<tr><td>${esc(u.nama)}</td><td>${esc(u.tim)}</td><td class="tabular">${u.hari_tercatat} hari</td><td class="muted small">Belum mencapai minimal 10 hari masuk</td></tr>`).join('')}</tbody></table>` : ''}
+        </div>`;
         toast(`Karyawan yang sudah masuk minimal 10 hari hanya ${data.length} orang. Perluas rentang tanggal.`, 'err');
-        return;
+        return false;
       }
       engine = KMeans.create(data, k, seed);
       engine.runAll();
       draw();
       renderResult();
+      return true;
     }
 
-    byId('k-siapkan').addEventListener('click', () => {
-      loadAndRun();
-      toast('Penilaian disiplin karyawan diperbarui');
+    byId('k-siapkan').addEventListener('click', async () => {
+      const ok = await loadAndRun();
+      if (ok) toast('Penilaian disiplin karyawan diperbarui');
     });
     byId('k-k').addEventListener('change', loadAndRun);
     byId('k-tim').addEventListener('change', loadAndRun);
     byId('k-exp-xls').addEventListener('click', () => {
-      if (!engine) return;
+      if (!engine) { toast('Belum ada hasil penilaian untuk diunduh', 'err'); return; }
       const details = engine.memberDetails();
       const cols = ['No', 'Nama Karyawan', 'Shift', 'Hari Masuk', 'Total Hari Kerja', 'Rata-rata Terlambat (Menit)', 'Persentase Tidak Masuk', 'Rata-rata Jam Kerja', 'Nilai Disiplin (0-100)', 'Kategori Disiplin', 'Keterangan'];
       const rows = details.map((m, i) => [
@@ -1081,13 +1366,19 @@
         renderSavedHistory();
       } catch (e) { toast(e.message, 'err'); }
     });
-    window.addEventListener('resize', () => { if (engine) draw(); });
+    if (window._kmeansResize) window.removeEventListener('resize', window._kmeansResize);
+    if (window._kmeansTheme) window.removeEventListener('themechange', window._kmeansTheme);
+    window._kmeansResize = () => { if (engine && document.body.contains(canvas)) draw(); };
+    window._kmeansTheme = () => { if (document.body.contains(canvas)) draw(); };
+    window.addEventListener('resize', window._kmeansResize);
+    window.addEventListener('themechange', window._kmeansTheme);
 
     await loadAndRun();
   }
 
   // ---------------- Riwayat Absen Lengkap ----------------
   async function viewAxel(view) {
+    const curYear = new Date().getFullYear();
     const [karyawanRes, timRes] = await Promise.all([
       Api.get('karyawan.list').catch(() => ({ data: [] })),
       Api.get('tim.list').catch(() => ({ data: [] }))
@@ -1106,10 +1397,11 @@
             <label class="field"><span>Dari Tanggal</span><input type="date" id="a-dari" value="${firstOfMonthISO()}"></label>
             <label class="field"><span>Sampai Tanggal</span><input type="date" id="a-sampai" value="${endOfMonthISO()}"></label>
             <label class="field"><span>Nama Karyawan</span><select id="a-karyawan"><option value="">Semua Karyawan</option>${karyawan.map((k) => `<option value="${k.id}">${esc(k.nama)}</option>`).join('')}</select></label>
-            <label class="field"><span>Bagian / Shift</span><select id="a-tim"><option value="">Semua Shift</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
+            <label class="field"><span>Divisi</span><select id="a-tim"><option value="">Semua Divisi</option>${timList.map((t) => `<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></label>
+            <label class="field"><span>Mode Kerja</span><select id="a-mode"><option value="">Semua Mode</option><option value="wfo">Di Kantor (WFO)</option><option value="wfh">WFH</option></select></label>
             <label class="field"><span>Status</span><select id="a-status"><option value="">Semua Status</option>${Object.entries(STATUS_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
             <button class="btn btn-primary" id="a-load">Tampilkan Data</button>
-            <button class="btn btn-ghost" id="a-all-year">Lihat Semua Data 2026</button>
+            <button class="btn btn-ghost" id="a-all-year">Lihat Semua Data ${curYear}</button>
           </div>
         </div>
 
@@ -1138,6 +1430,7 @@
 
     function currentFilters() {
       const tim = byId('a-tim').value;
+      const mode = byId('a-mode').value;
       const karyOpt = byId('a-karyawan').selectedOptions[0];
       const status = byId('a-status').value;
       return {
@@ -1145,7 +1438,7 @@
         sampai: byId('a-sampai').value,
         karyawan: byId('a-karyawan').value,
         karyawanNama: karyOpt ? karyOpt.textContent : 'Semua Karyawan',
-        tim, status
+        tim, mode, status
       };
     }
 
@@ -1209,13 +1502,13 @@
             <th>No</th>
             <th>Tanggal</th>
             <th>Nama Karyawan</th>
-            <th>Bagian / Shift</th>
+            <th>Divisi</th>
             <th>Status</th>
             <th>Jam Masuk</th>
             <th>Jam Pulang</th>
             <th>Lama Kerja</th>
             <th>Terlambat</th>
-            <th>Keterangan Shift</th>
+            <th>Mode &amp; Kegiatan</th>
             <th>Foto Bukti</th>
           </tr></thead>
           <tbody>${pageRows.map((r, idx) => `<tr>
@@ -1228,7 +1521,7 @@
             <td class="tabular">${fmtJam(r.jam_pulang)}</td>
             <td class="tabular">${fmtDurasi(r.durasi_kerja)}</td>
             <td class="tabular">${r.menit_terlambat == null ? '—' : (r.menit_terlambat === 0 ? '<span class="muted">Tepat waktu</span>' : `<span style="color:var(--status-terlambat);font-weight:600">${r.menit_terlambat} menit</span>`)}</td>
-            <td class="wrap">${renderCatatanCell(r)}</td>
+            <td class="wrap">${renderModeKegiatanCell(r)}</td>
             <td>${renderBuktiCell(r)}</td>
           </tr>`).join('') || '<tr><td colspan="11" class="muted">Tidak ada data sesuai pencarian.</td></tr>'}</tbody>
         </table>`;
@@ -1257,29 +1550,38 @@
 
     async function load() {
       const f = currentFilters();
-      const res = await Api.get('axel.dataset', {
-        dari: f.dari, sampai: f.sampai, karyawan: f.karyawan, tim: f.tim, status: f.status
-      });
-      dataset = res;
-      renderSummary(res.ringkasan);
-      applySearch();
+      if (f.dari && f.sampai && f.sampai < f.dari) {
+        toast('Tanggal selesai tidak boleh sebelum tanggal mulai.', 'err');
+        return;
+      }
+      try {
+        const res = await Api.get('axel.dataset', {
+          dari: f.dari, sampai: f.sampai, karyawan: f.karyawan, tim: f.tim, mode: f.mode, status: f.status
+        });
+        dataset = res;
+        renderSummary(res.ringkasan);
+        applySearch();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
     }
 
     function buildExportRows() {
-      const columns = ['No', 'Tanggal', 'Nama Karyawan', 'Shift', 'Status', 'Jam Masuk', 'Jam Pulang', 'Lama Kerja', 'Terlambat (Menit)', 'Keterangan'];
+      const columns = ['No', 'Tanggal', 'Nama Karyawan', 'Divisi', 'Mode', 'Status', 'Jam Masuk', 'Jam Pulang', 'Lama Kerja', 'Terlambat (Menit)', 'Kegiatan / Catatan'];
       const rows = filteredRows.map((r, i) => {
-        const { shiftLabel, cleanNote } = parseCatatanBukti(r);
+        const { shiftLabel, cleanNote, kegiatanText } = parseCatatanBukti(r);
         return [
           i + 1,
           fmtTanggal(r.tanggal),
           r.nama,
           r.tim,
+          (r.mode || 'wfo').toUpperCase(),
           STATUS_LABEL[r.status] || r.status,
           fmtJam(r.jam_masuk),
           fmtJam(r.jam_pulang),
           fmtDurasi(r.durasi_kerja),
           r.menit_terlambat == null ? '-' : r.menit_terlambat,
-          [shiftLabel, cleanNote].filter(Boolean).join(' - ') || '-'
+          [kegiatanText, shiftLabel, cleanNote].filter(Boolean).join(' - ') || '-'
         ];
       });
       return { columns, rows };
@@ -1287,16 +1589,18 @@
 
     byId('a-load').addEventListener('click', load);
     byId('a-all-year').addEventListener('click', () => {
-      byId('a-dari').value = '2026-01-01';
+      byId('a-dari').value = `${curYear}-01-01`;
       byId('a-sampai').value = todayISO();
       load();
     });
     byId('a-search').addEventListener('input', applySearch);
     byId('axel-csv').addEventListener('click', () => {
+      if (!filteredRows.length) { toast('Tidak ada data untuk diunduh', 'err'); return; }
       const { columns, rows } = buildExportRows();
       exportCsv(`riwayat-absen-${todayISO()}.csv`, columns, rows);
     });
     byId('axel-xls').addEventListener('click', () => {
+      if (!filteredRows.length) { toast('Tidak ada data untuk diunduh', 'err'); return; }
       const f = currentFilters();
       const { columns, rows } = buildExportRows();
       exportExcel(`riwayat-absen-${todayISO()}.xls`, `Riwayat Kehadiran ${state.org.nama} (${f.dari} s/d ${f.sampai})`, columns, rows);
@@ -1311,7 +1615,7 @@
         orgName: state.org.nama,
         filterLines: [
           `Periode Tanggal: ${f.dari} s/d ${f.sampai}`,
-          `Karyawan: ${f.karyawanNama} | Shift: ${f.tim || 'Semua Shift'} | Status: ${f.status ? STATUS_LABEL[f.status] : 'Semua Status'}`,
+          `Karyawan: ${f.karyawanNama} | Divisi: ${f.tim || 'Semua Divisi'} | Mode: ${f.mode ? f.mode.toUpperCase() : 'Semua Mode'} | Status: ${f.status ? STATUS_LABEL[f.status] : 'Semua Status'}`,
           `Jumlah Data: ${filteredRows.length} baris`
         ],
         columns,
@@ -1341,52 +1645,123 @@
     const presets = state.presets;
     const hariBoxes = Object.entries(state.hariLabels).map(([num, label]) => {
       const on = o.hari_kerja.split(',').includes(num);
-      return `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" value="${num}" ${on ? 'checked' : ''}> <span>${label}</span></label>`;
+      return `<label class="day-pill"><input type="checkbox" value="${num}" ${on ? 'checked' : ''}> <span>${label}</span></label>`;
     }).join('');
 
+    function summaryText(orgObj) {
+      const aturan = [
+        Number(orgObj.wajib_foto) ? 'Wajib Foto' : 'Foto Opsional',
+        Number(orgObj.wajib_barcode) ? 'Wajib Scan QR' : 'Tanpa Scan QR',
+        (Number(orgObj.wajib_gps) || Number(orgObj.radius_masuk_m) > 0)
+          ? (Number(orgObj.radius_masuk_m) > 0 ? `Wajib di Area Kantor (${orgObj.radius_masuk_m} m)` : 'Wajib GPS Aktif')
+          : 'GPS Bebas'
+      ];
+      return `Jam kerja <b>${esc(orgObj.jam_masuk)} – ${esc(orgObj.jam_pulang)}</b> (toleransi <b>${orgObj.toleransi_menit} menit</b>) · ${aturan.join(' · ')}`;
+    }
+
+    const curRadius = Number(o.radius_masuk_m) || 0;
+
     view.innerHTML = `
-      ${pageHead('Pengaturan Kantor', 'Atur nama perusahaan, jam masuk dan pulang, hari kerja, serta kode QR lokasi absen')}
-      <div class="grid grid-2">
-        <div class="glass card">
-          <div class="card-head"><h2>Informasi Kantor &amp; Jam Kerja</h2></div>
-          <form class="form" id="org-form">
-            <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required></label>
-            <label class="field"><span>Jenis Usaha / Kantor</span><select id="o-industri">
-              ${Object.entries(presets).map(([k, p]) => `<option value="${k}" ${o.industri === k ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}
-            </select></label>
-            <p class="muted small">Memilih jenis usaha akan mengisi jam masuk, jam pulang, dan hari kerja secara otomatis (tetap bisa diubah manual).</p>
-            <div class="field-row">
-              <label class="field"><span>Jam Masuk Standar</span><input type="time" id="o-masuk" value="${esc(o.jam_masuk)}"></label>
-              <label class="field"><span>Jam Pulang Standar</span><input type="time" id="o-pulang" value="${esc(o.jam_pulang)}"></label>
-              <label class="field"><span>Batas Toleransi Terlambat (Menit)</span><input type="number" id="o-toleransi" min="0" max="180" value="${o.toleransi_menit}"></label>
-            </div>
-            <div class="field"><span>Hari Kerja dalam Seminggu</span><div class="grid grid-3" style="margin-top:4px">${hariBoxes}</div></div>
-            <label class="field"><span>Kode QR Lokasi Kantor</span><input id="o-kode" value="${esc(o.kode_lokasi)}" required></label>
-            <div class="field">
-              <span>Titik Lokasi GPS Kantor (Opsional)</span>
-              <div class="muted small" style="margin-bottom:6px">Isi bagian ini jika ingin membatasi agar karyawan hanya bisa absen saat berada di area kantor.</div>
-              <button type="button" class="btn btn-secondary btn-sm" id="o-ambil-lokasi" style="width:fit-content">Gunakan Lokasi Saya Saat Ini</button>
-              <div class="field-row" style="margin-top:8px">
-                <label class="field"><span>Garis Lintang (Latitude)</span><input id="o-lat" type="number" step="any" value="${o.lat_kantor != null && o.lat_kantor !== '' ? esc(String(o.lat_kantor)) : ''}" placeholder="Contoh: -7.25747"></label>
-                <label class="field"><span>Garis Bujur (Longitude)</span><input id="o-lng" type="number" step="any" value="${o.lng_kantor != null && o.lng_kantor !== '' ? esc(String(o.lng_kantor)) : ''}" placeholder="Contoh: 112.75208"></label>
-                <label class="field"><span>Jarak Maksimal (Meter)</span><input id="o-radius" type="number" min="0" max="100000" value="${Number(o.radius_masuk_m) || 0}"></label>
-              </div>
-            </div>
-            <div class="field-row">
-              <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="o-foto" ${Number(o.wajib_foto) ? 'checked' : ''}> <span>Wajib ambil foto saat absen</span></label>
-              <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="o-barcode" ${Number(o.wajib_barcode) ? 'checked' : ''}> <span>Wajib scan QR kantor</span></label>
-            </div>
-            <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="o-gps" ${Number(o.wajib_gps) ? 'checked' : ''}> <span>Wajib nyalakan lokasi GPS saat absen</span></label>
-            <div class="alert alert-error" id="o-err" hidden></div>
-            <button class="btn btn-primary" type="submit">Simpan Pengaturan</button>
-          </form>
+      ${pageHead('Pengaturan Kantor', 'Atur jadwal kerja dan cara absen dengan bahasa yang sederhana')}
+      <div class="stack">
+        <div class="config-summary" id="o-summary">
+          <span><b>Aturan Aktif Saat Ini:</b> ${summaryText(o)}</span>
         </div>
 
-        <div class="glass card">
-          <div class="card-head"><h2>Gambar Kode QR Kantor</h2></div>
-          <p class="muted small" style="margin-bottom:14px">Cetak atau tempel gambar QR ini di dinding pintu masuk kantor agar dapat dipindai oleh karyawan saat absen.</p>
-          <div class="qr-holder" id="qr-holder"></div>
-          <p class="muted small" style="margin-top:12px">Kode QR Kantor: <b id="qr-code">${esc(o.kode_lokasi)}</b></p>
+        <div class="grid grid-2">
+          <div class="glass card">
+            <div class="card-head"><h2>Pengaturan Kantor &amp; Aturan Absen</h2></div>
+            <form class="form" id="org-form">
+              <div class="config-section">
+                <div class="config-section-title"><span class="step-num">1</span> Profil &amp; Jam Kerja Kantor</div>
+                <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: Toko Maju Jaya"></label>
+                <label class="field"><span>Pilih Jenis Usaha (Isi Jam Otomatis)</span><select id="o-industri">
+                  ${Object.entries(presets).map(([k, p]) => `<option value="${k}" ${o.industri === k ? 'selected' : ''}>${esc(p.label)} (${esc(p.jam_masuk)}–${esc(p.jam_pulang)})</option>`).join('')}
+                </select></label>
+                <div class="field-row">
+                  <label class="field"><span>Jam Masuk</span><input type="time" id="o-masuk" value="${esc(o.jam_masuk)}"></label>
+                  <label class="field"><span>Jam Pulang</span><input type="time" id="o-pulang" value="${esc(o.jam_pulang)}"></label>
+                  <label class="field"><span>Toleransi Telat (Menit)</span><input type="number" id="o-toleransi" min="0" max="180" value="${o.toleransi_menit}"></label>
+                </div>
+                <p class="muted small">Contoh: jika jam masuk 08:00 dan toleransi 15 menit, karyawan dianggap terlambat bila masuk lewat 08:15.</p>
+                <div class="field"><span>Hari Kerja Aktif</span><div class="day-pills" id="o-hari-wrap">${hariBoxes}</div></div>
+              </div>
+
+              <div class="config-section">
+                <div class="config-section-title"><span class="step-num">2</span> Cara Karyawan Absen (Khusus WFO)</div>
+                <p class="muted small">Aturan QR &amp; radius lokasi berlaku untuk karyawan yang absen <b>Di Kantor (WFO)</b>. Karyawan <b>WFH</b> tetap dapat absen dengan wajib mengisi catatan kegiatan.</p>
+                <div class="rule-cards">
+                  <label class="rule-card">
+                    <input type="checkbox" id="o-foto" ${Number(o.wajib_foto) ? 'checked' : ''}>
+                    <div>
+                      <div class="rule-card-title">Wajib Ambil Foto Selfie</div>
+                      <div class="rule-card-desc">Karyawan harus mengambil foto wajah saat absen masuk dan pulang.</div>
+                    </div>
+                  </label>
+                  <label class="rule-card">
+                    <input type="checkbox" id="o-barcode" ${Number(o.wajib_barcode) ? 'checked' : ''}>
+                    <div>
+                      <div class="rule-card-title">Wajib Scan Kode QR Kantor</div>
+                      <div class="rule-card-desc">Karyawan memindai gambar QR yang ditempel di pintu/meja kantor.</div>
+                    </div>
+                  </label>
+                  <label class="rule-card">
+                    <input type="checkbox" id="o-gps" ${Number(o.wajib_gps) ? 'checked' : ''}>
+                    <div>
+                      <div class="rule-card-title">Wajib Cek Lokasi GPS</div>
+                      <div class="rule-card-desc">Pastikan karyawan menyalakan GPS di HP/komputer saat absen.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="config-section">
+                <div class="config-section-title"><span class="step-num">3</span> Kode QR &amp; Pembatasan Lokasi Kantor</div>
+                <div class="field">
+                  <span>Kode QR Lokasi Kantor</span>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <input id="o-kode" value="${esc(o.kode_lokasi)}" required placeholder="Contoh: KANTOR-01">
+                    <button type="button" class="btn btn-secondary btn-sm" id="o-gen-kode">Buat Kode Acak</button>
+                  </div>
+                </div>
+                <div class="field">
+                  <span>Batas Jarak Maksimal dari Kantor</span>
+                  <div class="quick-pills" id="o-radius-pills" style="margin-bottom:6px">
+                    <button type="button" class="quick-pill ${curRadius === 0 ? 'active' : ''}" data-rad="0">Bebas (Tanpa Batas)</button>
+                    <button type="button" class="quick-pill ${curRadius === 50 ? 'active' : ''}" data-rad="50">50 m (Dalam Gedung)</button>
+                    <button type="button" class="quick-pill ${curRadius === 100 ? 'active' : ''}" data-rad="100">100 m (Area Kantor)</button>
+                    <button type="button" class="quick-pill ${curRadius === 250 ? 'active' : ''}" data-rad="250">250 m (Area Luas)</button>
+                  </div>
+                  <div class="field-row">
+                    <label class="field"><span>Jarak Maksimal (Meter)</span><input id="o-radius" type="number" min="0" max="100000" value="${curRadius}"></label>
+                  </div>
+                </div>
+                <div class="field">
+                  <span>Titik Lokasi Kantor (Diisi jika pakai GPS / batas jarak)</span>
+                  <div class="muted small" style="margin-bottom:6px">Saat Anda berada di kantor, klik tombol di bawah agar titik lokasi terisi otomatis tanpa mengetik angka koordinat.</div>
+                  <button type="button" class="btn btn-secondary btn-sm" id="o-ambil-lokasi" style="width:fit-content">${ico('mapPin', 15)} Ambil Lokasi Kantor Otomatis</button>
+                  <div class="field-row" style="margin-top:8px">
+                    <label class="field"><span>Garis Lintang (Latitude)</span><input id="o-lat" type="number" step="any" value="${o.lat_kantor != null && o.lat_kantor !== '' ? esc(String(o.lat_kantor)) : ''}" placeholder="Otomatis terisi"></label>
+                    <label class="field"><span>Garis Bujur (Longitude)</span><input id="o-lng" type="number" step="any" value="${o.lng_kantor != null && o.lng_kantor !== '' ? esc(String(o.lng_kantor)) : ''}" placeholder="Otomatis terisi"></label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="alert alert-error" id="o-err" hidden></div>
+              <button class="btn btn-primary btn-lg" type="submit">Simpan Semua Pengaturan</button>
+            </form>
+          </div>
+
+          <div class="glass card" style="height:fit-content">
+            <div class="card-head"><h2>Poster Kode QR Kantor</h2></div>
+            <p class="muted small" style="margin-bottom:14px">Cetak atau unduh gambar QR ini, lalu tempel di dekat pintu masuk kantor agar karyawan bisa memindainya saat absen.</p>
+            <div class="qr-holder" id="qr-holder" style="margin:0 auto"></div>
+            <p class="muted small" style="margin-top:12px;text-align:center">Kode Lokasi: <b id="qr-code">${esc(o.kode_lokasi)}</b></p>
+            <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px">
+              <button type="button" class="btn btn-secondary btn-sm" id="qr-download">Unduh Gambar QR</button>
+              <button type="button" class="btn btn-primary btn-sm" id="qr-print">Cetak Poster QR</button>
+            </div>
+          </div>
         </div>
       </div>`;
 
@@ -1396,7 +1771,7 @@
         const qr = qrcode(0, 'M');
         qr.addData(code || 'ABSEN');
         qr.make();
-        holder.innerHTML = qr.createSvgTag(5, 8);
+        holder.innerHTML = qr.createSvgTag(6, 8);
       } catch (e) {
         holder.innerHTML = '<p class="muted small">Gagal membuat gambar QR.</p>';
       }
@@ -1404,6 +1779,65 @@
     }
     renderQr(o.kode_lokasi);
     byId('o-kode').addEventListener('input', (e) => renderQr(e.target.value));
+
+    byId('o-gen-kode').addEventListener('click', () => {
+      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const newCode = `ABSEN-${rand}`;
+      byId('o-kode').value = newCode;
+      renderQr(newCode);
+      toast('Kode QR baru dibuat. Jangan lupa klik Simpan Pengaturan.');
+    });
+
+    function syncRadiusPills(val) {
+      view.querySelectorAll('#o-radius-pills .quick-pill').forEach((p) => {
+        p.classList.toggle('active', Number(p.dataset.rad) === Number(val));
+      });
+    }
+    view.querySelectorAll('#o-radius-pills .quick-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        byId('o-radius').value = pill.dataset.rad;
+        syncRadiusPills(pill.dataset.rad);
+      });
+    });
+    byId('o-radius').addEventListener('input', (e) => syncRadiusPills(e.target.value));
+
+    byId('qr-download').addEventListener('click', () => {
+      const svg = byId('qr-holder').querySelector('svg');
+      if (!svg) { toast('Gambar QR belum siap', 'err'); return; }
+      const xml = new XMLSerializer().serializeToString(svg);
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = 480; c.height = 480;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 20, 20, 440, 440);
+        const a = document.createElement('a');
+        a.href = c.toDataURL('image/png');
+        a.download = `qr-absensi-${(byId('o-kode').value || 'kantor').replace(/[^a-zA-Z0-9_-]/g, '')}.png`;
+        a.click();
+        toast('Gambar QR berhasil diunduh');
+      };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+    });
+
+    byId('qr-print').addEventListener('click', () => {
+      const svg = byId('qr-holder').innerHTML;
+      const kode = esc(byId('o-kode').value || 'ABSEN');
+      const namaKantor = esc(byId('o-nama').value || state.org.nama);
+      const win = window.open('', '_blank', 'width=560,height=680');
+      if (!win) { toast('Izinkan pop-up browser untuk mencetak poster QR', 'err'); return; }
+      win.document.write(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Poster QR Absensi</title>
+        <style>body{font-family:sans-serif;text-align:center;padding:40px;color:#0f172a}
+        .box{border:2px dashed #cbd5e1;border-radius:16px;padding:32px;max-width:420px;margin:0 auto}
+        h1{margin:0 0 6px;font-size:22px}p{color:#475569;margin:0 0 20px;font-size:14px}
+        .qr svg{width:260px;height:260px}.code{margin-top:14px;font-size:16px;font-weight:700;letter-spacing:1px}</style>
+        </head><body><div class="box"><h1>${namaKantor}</h1><p>Pindai Kode QR ini untuk Absen Masuk &amp; Pulang</p>
+        <div class="qr">${svg}</div><div class="code">${kode}</div></div>
+        <script>window.onload=function(){window.print();}<\/script></body></html>`);
+      win.document.close();
+    });
 
     byId('o-ambil-lokasi').addEventListener('click', async () => {
       const btnLok = byId('o-ambil-lokasi');
@@ -1414,12 +1848,12 @@
         if (!loc.ok) { toast(loc.error, 'err'); return; }
         byId('o-lat').value = loc.lat.toFixed(7);
         byId('o-lng').value = loc.lng.toFixed(7);
-        toast('Titik lokasi berhasil diambil');
+        toast('Titik lokasi kantor berhasil diambil');
       } catch (e) {
         toast('Gagal mengambil lokasi.', 'err');
       } finally {
         btnLok.disabled = false;
-        btnLok.textContent = 'Gunakan Lokasi Saya Saat Ini';
+        btnLok.innerHTML = `${ico('mapPin', 15)} Ambil Lokasi Kantor Otomatis`;
       }
     });
 
@@ -1430,15 +1864,27 @@
       byId('o-pulang').value = p.jam_pulang;
       byId('o-toleransi').value = p.toleransi_menit;
       const days = p.hari_kerja.split(',');
-      view.querySelectorAll('.grid-3 input[type="checkbox"]').forEach((c) => (c.checked = days.includes(c.value)));
+      view.querySelectorAll('#o-hari-wrap input[type="checkbox"]').forEach((c) => (c.checked = days.includes(c.value)));
+      toast(`Jam kerja diisi otomatis sesuai jenis usaha "${p.label}"`);
     });
 
     byId('org-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errBox = byId('o-err');
       errBox.hidden = true;
-      const hariKerja = [...view.querySelectorAll('.grid-3 input[type="checkbox"]')].filter((c) => c.checked).map((c) => Number(c.value));
+      const hariKerja = [...view.querySelectorAll('#o-hari-wrap input[type="checkbox"]')].filter((c) => c.checked).map((c) => Number(c.value));
       if (!hariKerja.length) { errBox.textContent = 'Pilih minimal satu hari kerja.'; errBox.hidden = false; return; }
+
+      const wajibGps = byId('o-gps').checked ? 1 : 0;
+      const radiusVal = Number(byId('o-radius').value) || 0;
+      const latVal = byId('o-lat').value.trim();
+      const lngVal = byId('o-lng').value.trim();
+      if ((wajibGps || radiusVal > 0) && (!latVal || !lngVal)) {
+        errBox.textContent = 'Anda mengaktifkan GPS atau batas jarak. Klik tombol "Ambil Lokasi Kantor Otomatis" terlebih dahulu.';
+        errBox.hidden = false;
+        return;
+      }
+
       try {
         const res = await Api.post('org.update', {
           nama: byId('o-nama').value,
@@ -1450,14 +1896,16 @@
           kode_lokasi: byId('o-kode').value,
           wajib_foto: byId('o-foto').checked ? 1 : 0,
           wajib_barcode: byId('o-barcode').checked ? 1 : 0,
-          lat_kantor: byId('o-lat').value,
-          lng_kantor: byId('o-lng').value,
-          radius_masuk_m: Number(byId('o-radius').value) || 0,
-          wajib_gps: byId('o-gps').checked ? 1 : 0
+          lat_kantor: latVal,
+          lng_kantor: lngVal,
+          radius_masuk_m: radiusVal,
+          wajib_gps: wajibGps
         });
         state.org = res.organisasi;
         byId('side-org').textContent = state.org.nama;
         if (byId('top-org')) byId('top-org').textContent = state.org.nama;
+        if (byId('top-schedule')) byId('top-schedule').innerHTML = `${ico('clock', 14)}<span>Jam Kerja ${esc(state.org.jam_masuk)}–${esc(state.org.jam_pulang)} WIB</span>`;
+        byId('o-summary').innerHTML = `<span><b>Aturan Aktif Saat Ini:</b> ${summaryText(state.org)}</span>`;
         toast('Pengaturan kantor berhasil disimpan');
       } catch (err) { errBox.textContent = err.message; errBox.hidden = false; }
     });
@@ -1466,16 +1914,56 @@
   // ---------------- Daftar Karyawan ----------------
   async function viewKaryawan(view) {
     view.innerHTML = `
-      ${pageHead('Daftar Karyawan', 'Tambah karyawan baru, atur pembagian shift/bagian, atau ubah data karyawan', `
+      ${pageHead('Daftar Karyawan', 'Tambah akun karyawan, atur divisi dan jabatan, atau setel ulang kata sandi login', `
         <button class="btn btn-primary" id="add-emp">+ Tambah Karyawan Baru</button>`)}
       <div class="glass card" id="emp-box"><p class="muted">Sedang memuat data…</p></div>`;
 
-    async function load() {
-      const { data } = await Api.get('karyawan.list');
+    let allEmployees = [];
+
+    function renderEmpTable() {
+      const q = (byId('emp-search')?.value || '').trim().toLowerCase();
+      const rows = q
+        ? allEmployees.filter((u) =>
+            (u.nama || '').toLowerCase().includes(q) ||
+            (u.email || '').toLowerCase().includes(q) ||
+            (u.tim || '').toLowerCase().includes(q) ||
+            (u.jabatan || '').toLowerCase().includes(q))
+        : allEmployees;
+
+      const tbody = byId('emp-tbody');
+      if (tbody) {
+        tbody.innerHTML = rows.map((u, idx) => `<tr>
+          <td class="muted tabular">${idx + 1}</td>
+          <td>${empCell(u.nama)}</td>
+          <td>${esc(u.email)}</td>
+          <td>${PERAN_LABEL[u.peran] || esc(u.peran)}</td>
+          <td><span class="shift-tag">${esc(u.tim)}</span></td>
+          <td>${esc(u.jabatan || '—')}</td>
+          <td>${Number(u.aktif) ? '<span class="badge badge-hadir">Aktif</span>' : '<span class="badge badge-netral">Nonaktif</span>'}</td>
+          <td class="toolbar">
+            <button class="btn btn-secondary btn-sm" data-edit='${esc(JSON.stringify(u))}'>Ubah</button>
+            ${u.id !== state.user.id ? `<button class="btn btn-ghost btn-sm" data-toggle="${u.id}" data-aktif="${Number(u.aktif) ? 0 : 1}">${Number(u.aktif) ? 'Nonaktifkan' : 'Aktifkan'}</button>` : ''}
+          </td>
+        </tr>`).join('') || '<tr><td colspan="8" class="muted">Tidak ada karyawan sesuai pencarian.</td></tr>';
+        tbody.querySelectorAll('[data-edit]').forEach((b) =>
+          b.addEventListener('click', () => openEmpForm(JSON.parse(b.dataset.edit), load)));
+        tbody.querySelectorAll('[data-toggle]').forEach((b) =>
+          b.addEventListener('click', async () => {
+            try {
+              await Api.post('karyawan.toggle', { id: Number(b.dataset.toggle), aktif: Number(b.dataset.aktif) });
+              toast('Status karyawan berhasil diubah'); load();
+            } catch (e) { toast(e.message, 'err'); }
+          }));
+        return;
+      }
+
       byId('emp-box').innerHTML = `
-        <div class="card-head">
+        <div class="card-head" style="flex-wrap:wrap">
           <h2>Semua Karyawan &amp; Admin</h2>
-          <span class="pill-note">${data.length} orang</span>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <input type="search" id="emp-search" placeholder="Cari nama, email, atau divisi…" style="min-height:34px;width:220px">
+            <span class="pill-note">${allEmployees.length} orang</span>
+          </div>
         </div>
         <div class="table-wrap"><table>
           <thead>
@@ -1484,35 +1972,23 @@
               <th>Nama Lengkap</th>
               <th>Email</th>
               <th>Jabatan / Akses</th>
-              <th>Bagian / Shift</th>
+              <th>Divisi</th>
               <th>Posisi</th>
               <th>Status</th>
               <th>Pengaturan</th>
             </tr>
           </thead>
-          <tbody>${data.map((u, idx) => `<tr>
-            <td class="muted tabular">${idx + 1}</td>
-            <td>${empCell(u.nama)}</td>
-            <td>${esc(u.email)}</td>
-            <td>${PERAN_LABEL[u.peran] || esc(u.peran)}</td>
-            <td><span class="shift-tag">${esc(u.tim)}</span></td>
-            <td>${esc(u.jabatan || '—')}</td>
-            <td>${Number(u.aktif) ? '<span class="badge badge-hadir">Aktif</span>' : '<span class="badge badge-netral">Nonaktif</span>'}</td>
-            <td class="toolbar">
-              <button class="btn btn-secondary btn-sm" data-edit='${esc(JSON.stringify(u))}'>Ubah</button>
-              ${u.id !== state.user.id ? `<button class="btn btn-ghost btn-sm" data-toggle="${u.id}" data-aktif="${Number(u.aktif) ? 0 : 1}">${Number(u.aktif) ? 'Nonaktifkan' : 'Aktifkan'}</button>` : ''}
-            </td>
-          </tr>`).join('')}</tbody>
+          <tbody id="emp-tbody"></tbody>
         </table></div>`;
-      byId('emp-box').querySelectorAll('[data-edit]').forEach((b) =>
-        b.addEventListener('click', () => openEmpForm(JSON.parse(b.dataset.edit), load)));
-      byId('emp-box').querySelectorAll('[data-toggle]').forEach((b) =>
-        b.addEventListener('click', async () => {
-          try {
-            await Api.post('karyawan.toggle', { id: Number(b.dataset.toggle), aktif: Number(b.dataset.aktif) });
-            toast('Status karyawan berhasil diubah'); load();
-          } catch (e) { toast(e.message, 'err'); }
-        }));
+      byId('emp-search').addEventListener('input', renderEmpTable);
+      renderEmpTable();
+    }
+
+    async function load() {
+      const { data } = await Api.get('karyawan.list');
+      allEmployees = data || [];
+      byId('emp-box').innerHTML = '';
+      renderEmpTable();
     }
     byId('add-emp').addEventListener('click', () => openEmpForm(null, load));
     await load();
@@ -1529,10 +2005,10 @@
           <label class="field"><span>Hak Akses</span><select id="e-peran">${Object.entries(PERAN_LABEL).map(([k, v]) => `<option value="${k}" ${(u?.peran || 'karyawan') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>Bagian / Shift Kerja</span><input id="e-tim" value="${esc(u?.tim || 'Shift Pagi')}" placeholder="Contoh: Shift Pagi"></label>
-          <label class="field"><span>Posisi / Jabatan</span><input id="e-jabatan" value="${esc(u?.jabatan || 'Staf Operasional')}" placeholder="Contoh: Staf Operasional"></label>
+          <label class="field"><span>Divisi / Departemen</span><input id="e-tim" value="${esc(u?.tim || 'Operasional')}" placeholder="Contoh: Operasional / Finance"></label>
+          <label class="field"><span>Jabatan</span><input id="e-jabatan" value="${esc(u?.jabatan || 'Staf')}" placeholder="Contoh: Staf / Supervisor"></label>
         </div>
-        <label class="field"><span>Kata Sandi ${edit ? '(Kosongkan jika tidak ingin mengganti)' : ''}</span><input type="password" id="e-sandi" placeholder="Minimal 6 huruf/angka"></label>
+        <label class="field"><span>Kata Sandi Login ${edit ? '(Kosongkan jika tidak ingin mengganti)' : ''}</span><input type="password" id="e-sandi" placeholder="Minimal 6 huruf/angka (dipakai karyawan untuk login)"></label>
         <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="e-aktif" ${!edit || Number(u.aktif) ? 'checked' : ''}> <span>Karyawan Masih Aktif Bekerja</span></label>
         <div class="alert alert-error" id="e-err" hidden></div>
         <div style="display:flex;justify-content:flex-end;gap:10px">
@@ -1544,15 +2020,25 @@
     m.$('[data-close-btn]').addEventListener('click', m.close);
     m.$('#e-save').addEventListener('click', async () => {
       const errBox = m.$('#e-err'); errBox.hidden = true;
+      const nama = m.$('#e-nama').value.trim();
+      const email = m.$('#e-email').value.trim();
+      const sandi = m.$('#e-sandi').value;
+      if (!nama) { errBox.textContent = 'Nama lengkap wajib diisi.'; errBox.hidden = false; return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errBox.textContent = 'Masukkan alamat email yang valid.'; errBox.hidden = false; return;
+      }
+      if ((!edit && sandi.length < 6) || (edit && sandi !== '' && sandi.length < 6)) {
+        errBox.textContent = 'Kata sandi minimal 6 huruf atau angka.'; errBox.hidden = false; return;
+      }
       try {
         await Api.post('karyawan.save', {
           id: u?.id || 0,
-          nama: m.$('#e-nama').value,
-          email: m.$('#e-email').value,
+          nama,
+          email,
           peran: m.$('#e-peran').value,
           tim: m.$('#e-tim').value,
           jabatan: m.$('#e-jabatan').value,
-          kata_sandi: m.$('#e-sandi').value,
+          kata_sandi: sandi,
           aktif: m.$('#e-aktif').checked ? 1 : 0
         });
         m.close(); toast('Data karyawan berhasil disimpan'); reload();
@@ -1581,8 +2067,8 @@
             ${isAdmin ? `
             <label class="field">
               <span>Pilih Nama Karyawan</span>
-              <select id="i-pengguna" required>
-                ${karyawanList.map((k) => `<option value="${k.id}">${esc(k.nama)} — ${esc(k.tim)}</option>`).join('')}
+              <select id="i-pengguna" required ${karyawanList.length ? '' : 'disabled'}>
+                ${karyawanList.length ? karyawanList.map((k) => `<option value="${k.id}">${esc(k.nama)} — ${esc(k.tim)}</option>`).join('') : '<option value="">Belum ada karyawan aktif</option>'}
               </select>
             </label>` : ''}
             <label class="field">
@@ -1638,6 +2124,35 @@
     byId('izin-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errBox = byId('i-err'); errBox.hidden = true;
+      const mulai = byId('i-mulai').value;
+      const sampai = byId('i-sampai').value;
+      const catatan = byId('i-catatan').value.trim();
+      if (isAdmin && !karyawanList.length) {
+        errBox.textContent = 'Belum ada karyawan aktif untuk dicatat izin/sakit.';
+        errBox.hidden = false;
+        return;
+      }
+      if (!mulai || !sampai) {
+        errBox.textContent = 'Tanggal mulai dan selesai wajib diisi.';
+        errBox.hidden = false;
+        return;
+      }
+      if (sampai < mulai) {
+        errBox.textContent = 'Tanggal selesai tidak boleh sebelum tanggal mulai.';
+        errBox.hidden = false;
+        return;
+      }
+      const diffDays = Math.round((new Date(sampai + 'T00:00:00') - new Date(mulai + 'T00:00:00')) / 86400000);
+      if (diffDays > 30) {
+        errBox.textContent = 'Rentang pengajuan maksimal 30 hari.';
+        errBox.hidden = false;
+        return;
+      }
+      if (!catatan) {
+        errBox.textContent = 'Mohon isi keterangan izin/sakit.';
+        errBox.hidden = false;
+        return;
+      }
       if (!isAdmin && d.wajib_foto && !foto) {
         errBox.textContent = 'Mohon lampirkan foto bukti terlebih dahulu.';
         errBox.hidden = false;
@@ -1646,9 +2161,9 @@
       try {
         const payload = {
           jenis: byId('i-jenis').value,
-          mulai: byId('i-mulai').value,
-          sampai: byId('i-sampai').value,
-          catatan: byId('i-catatan').value,
+          mulai,
+          sampai,
+          catatan,
           foto
         };
         if (isAdmin && byId('i-pengguna')) {
@@ -1666,12 +2181,23 @@
 
   // ---------------- Tema & Jam ----------------
   function initTheme() {
+    const toggleBtn = byId('theme-toggle');
+    const syncLabel = (theme) => {
+      if (toggleBtn) {
+        toggleBtn.innerHTML = theme === 'dark'
+          ? `${ico('sun', 14)}<span>Mode Terang</span>`
+          : `${ico('moon', 14)}<span>Mode Gelap</span>`;
+      }
+    };
     const saved = localStorage.getItem('absensi-theme') || 'light';
     document.documentElement.dataset.theme = saved;
-    byId('theme-toggle').addEventListener('click', () => {
+    syncLabel(saved);
+    toggleBtn.addEventListener('click', () => {
       const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       document.documentElement.dataset.theme = next;
       localStorage.setItem('absensi-theme', next);
+      syncLabel(next);
+      window.dispatchEvent(new CustomEvent('themechange', { detail: next }));
     });
   }
 
@@ -1706,6 +2232,7 @@
 
     byId('side-org').textContent = state.org.nama;
     if (byId('top-org')) byId('top-org').textContent = state.org.nama;
+    if (byId('top-schedule')) byId('top-schedule').innerHTML = `${ico('clock', 14)}<span>Jam Kerja ${esc(state.org.jam_masuk)}–${esc(state.org.jam_pulang)} WIB</span>`;
     byId('user-name').textContent = state.user.nama;
     byId('user-role').textContent = PERAN_LABEL[state.user.peran] || state.user.peran;
     byId('user-avatar').textContent = (state.user.nama || 'A').charAt(0).toUpperCase();

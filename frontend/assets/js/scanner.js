@@ -139,6 +139,7 @@ const Scanner = (() => {
   function open(options) {
     const opt = Object.assign(
       {
+        mode: 'wfo',
         wajibBarcode: true,
         wajibFoto: true,
         wajibGps: false,
@@ -151,7 +152,19 @@ const Scanner = (() => {
       options
     );
 
-    const butuhGps = !!(opt.wajibGps || opt.radius > 0);
+    const isWfh = opt.mode === 'wfh';
+    const needBarcode = !isWfh && !!opt.wajibBarcode;
+    const needFoto = !!opt.wajibFoto;
+    const butuhGps = !isWfh && !!(opt.wajibGps || opt.radius > 0);
+
+    if (!needBarcode && !needFoto && !butuhGps) {
+      return Promise.resolve({
+        barcode: null,
+        foto: null,
+        gps: null,
+        palsu: false
+      });
+    }
 
     return new Promise((resolve, reject) => {
       const overlay = h('div', { class: 'overlay', role: 'dialog', 'aria-modal': 'true' });
@@ -180,9 +193,9 @@ const Scanner = (() => {
         return haversine(opt.latKantor, opt.lngKantor, gps.lat, gps.lng);
       }
 
-      function expectsBarcode() { return opt.wajibBarcode; }
+      function expectsBarcode() { return needBarcode; }
       function readyToSubmit() {
-        if (opt.wajibFoto && !state.foto) return false;
+        if (needFoto && !state.foto) return false;
         if (butuhGps && !state.gps) return false;
         return true;
       }
@@ -285,19 +298,26 @@ const Scanner = (() => {
 
       function showManualInput() {
         const wrap = h('div', { class: 'form', style: 'margin-top:16px' });
-        const input = h('input', { type: 'text', placeholder: 'cth: ABSEN-KANTOR-01' });
+        const input = h('input', { type: 'text', placeholder: 'Contoh: ABSEN-KANTOR-01' });
+        const errEl = h('p', { class: 'alert alert-error', style: 'display:none' });
+        const submitManual = () => {
+          const val = input.value.trim();
+          if (!val) {
+            errEl.textContent = 'Mohon ketik kode lokasi kantor terlebih dahulu.';
+            errEl.style.display = 'block';
+            return;
+          }
+          state.barcode = val;
+          goPhoto();
+        };
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); submitManual(); }
+        });
         wrap.append(
-          h('p', { class: 'alert alert-error' }, 'Kamera tidak tersedia atau izin ditolak. Masukkan kode lokasi secara manual.'),
-          h('label', { class: 'field' }, [h('span', {}, 'Kode lokasi'), input]),
-          h('button', {
-            class: 'btn btn-primary btn-block',
-            onclick: () => {
-              const val = input.value.trim();
-              if (!val) return;
-              state.barcode = val;
-              goPhoto();
-            }
-          }, 'Lanjut')
+          h('p', { class: 'alert alert-error' }, 'Kamera tidak tersedia atau izin ditolak. Masukkan kode lokasi kantor secara manual.'),
+          h('label', { class: 'field' }, [h('span', {}, 'Kode QR / Lokasi Kantor'), input]),
+          errEl,
+          h('button', { class: 'btn btn-primary btn-block', onclick: submitManual }, 'Lanjut')
         );
         modal.append(wrap);
       }
@@ -340,7 +360,11 @@ const Scanner = (() => {
         }
 
         modal.querySelector('#btn-capture').addEventListener('click', async () => {
-          if (!video.videoWidth) return;
+          if (!video.videoWidth) {
+            const st = modal.querySelector('.cam-status');
+            if (st) st.textContent = 'Kamera sedang bersiap, tunggu sebentar lalu klik lagi.';
+            return;
+          }
           const shot = document.createElement('canvas');
           const maxW = 720;
           const ratio = video.videoHeight / video.videoWidth;
@@ -353,15 +377,16 @@ const Scanner = (() => {
       }
 
       function renderConfirm() {
+        modal.innerHTML = '';
         const info = h('div', { class: 'stack', style: 'margin-top:16px' });
-        if (opt.wajibBarcode) {
+        if (needBarcode) {
           info.append(h('div', { class: 'riwayat-row' }, [
-            h('span', { class: 't' }, 'Barcode'), h('span', { class: 's' }, state.barcode || '-')
+            h('span', { class: 't' }, 'Kode QR Kantor'), h('span', { class: 's' }, state.barcode || '-')
           ]));
         }
 
         // Status lokasi.
-        let lokasiText = 'Lokasi GPS tidak diperlukan.';
+        let lokasiText = isWfh ? 'Mode WFH · Lokasi kantor tidak diwajibkan.' : 'Lokasi GPS tidak diperlukan.';
         let lokasiClass = 'muted small';
         if (butuhGps || state.gpsLoading || state.gps || state.gpsError) {
           if (state.gpsLoading) {
@@ -417,8 +442,9 @@ const Scanner = (() => {
       function goConfirm() { stopCamera(); phaseConfirm(); }
 
       if (butuhGps) mulaiGps();
-      if (opt.wajibBarcode) phaseScan();
-      else phasePhoto();
+      if (needBarcode) phaseScan();
+      else if (needFoto) phasePhoto();
+      else phaseConfirm();
     });
   }
 
