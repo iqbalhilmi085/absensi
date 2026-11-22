@@ -206,6 +206,43 @@ check($kor['code'] === 200, 'E2E: absensi.koreksi updates attendance record');
 $rekap = e2eReq("{$base}/backend/api.php?action=rekap&dari={$today}&sampai={$today}", $ckAdm);
 check($rekap['code'] === 200 && count($rekap['json']['data'] ?? []) >= 2, 'E2E: rekap returns monthly summary');
 
+// Division schedule & replacement shift E2E
+$addDiv = e2eReq("{$base}/backend/api.php?action=divisi.save", $ckAdm, [
+    'nama' => 'Podcast & Video',
+    'jam_masuk' => '11:00',
+    'jam_pulang' => '19:00',
+], $csrfAdm);
+check($addDiv['code'] === 200 && !empty($addDiv['json']['id']), 'E2E: admin creates custom division schedule Podcast & Video (11:00-19:00)');
+
+$addShift = e2eReq("{$base}/backend/api.php?action=shift.save", $ckAdm, [
+    'nama' => 'Shift Sore',
+    'jam_masuk' => '15:00',
+    'jam_pulang' => '23:00',
+], $csrfAdm);
+$shiftSoreId = (int) ($addShift['json']['id'] ?? 0);
+check($addShift['code'] === 200 && $shiftSoreId > 0, 'E2E: admin creates custom replacement Shift Sore (15:00-23:00)');
+
+$addVideoEmp = e2eReq("{$base}/backend/api.php?action=karyawan.save", $ckAdm, [
+    'nama' => 'Raka Video',
+    'email' => 'raka.video@ketik.com',
+    'peran' => 'karyawan',
+    'tim' => 'Podcast & Video',
+    'jabatan' => 'Videografer',
+    'kata_sandi' => '',
+    'aktif' => 1,
+], $csrfAdm);
+$videoQr = (string) ($addVideoEmp['json']['kode_qr'] ?? '');
+$lkVideo = e2eReq("{$base}/backend/api.php?action=qr.lookup", $ckPub, ['kode_qr' => $videoQr], $csrfPub);
+check(($lkVideo['json']['data']['jadwal_divisi']['jam_masuk'] ?? '') === '11:00' && count($lkVideo['json']['data']['shifts'] ?? []) >= 4, 'E2E: qr.lookup resolves custom division hours (11:00) and lists replacement shifts');
+
+$inShift = e2eReq("{$base}/backend/api.php?action=qr.absen", $ckPub, [
+    'kode_qr' => $videoQr,
+    'mode' => 'wfh',
+    'shift_id' => $shiftSoreId,
+    'kegiatan' => 'Liputan video acara kampus',
+], $csrfPub);
+check($inShift['code'] === 200 && ($inShift['json']['data']['shift_nama'] ?? '') === 'Shift Sore' && ($inShift['json']['data']['jam_jadwal_masuk'] ?? '') === '15:00', 'E2E: qr.absen saves chosen Shift Sore snapshot (15:00) cleanly without forced reason');
+
 $kiosk = e2eReq("{$base}/backend/api.php?action=kiosk.info");
 check($kiosk['code'] === 410, 'E2E: kiosk.info returns 410');
 

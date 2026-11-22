@@ -168,6 +168,27 @@ function init_schema(PDO $pdo): void
             dibuat_pada DATETIME     NOT NULL,
             KEY idx_rate (kunci, ip, dibuat_pada)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        "CREATE TABLE IF NOT EXISTS divisi_jadwal (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            organisasi_id INT          NOT NULL,
+            nama          VARCHAR(100) NOT NULL,
+            jam_masuk     CHAR(5)      NOT NULL DEFAULT '08:00',
+            jam_pulang    CHAR(5)      NOT NULL DEFAULT '17:00',
+            dibuat_pada   DATETIME     NOT NULL,
+            UNIQUE KEY uq_divisi_org_nama (organisasi_id, nama),
+            CONSTRAINT fk_divisi_org FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        "CREATE TABLE IF NOT EXISTS shift_kerja (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            organisasi_id INT          NOT NULL,
+            nama          VARCHAR(100) NOT NULL,
+            jam_masuk     CHAR(5)      NOT NULL DEFAULT '08:00',
+            jam_pulang    CHAR(5)      NOT NULL DEFAULT '17:00',
+            aktif         TINYINT(1)   NOT NULL DEFAULT 1,
+            CONSTRAINT fk_shift_org FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
 
     foreach ($statements as $sql) {
@@ -299,6 +320,27 @@ function init_schema_sqlite(PDO $pdo): void
             dibuat_pada TEXT NOT NULL
         )",
         'CREATE INDEX IF NOT EXISTS idx_rate ON rate_limit (kunci, ip, dibuat_pada)',
+
+        "CREATE TABLE IF NOT EXISTS divisi_jadwal (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            organisasi_id INTEGER NOT NULL,
+            nama          TEXT NOT NULL,
+            jam_masuk     TEXT NOT NULL DEFAULT '08:00',
+            jam_pulang    TEXT NOT NULL DEFAULT '17:00',
+            dibuat_pada   TEXT NOT NULL,
+            UNIQUE (organisasi_id, nama),
+            FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
+        )",
+
+        "CREATE TABLE IF NOT EXISTS shift_kerja (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            organisasi_id INTEGER NOT NULL,
+            nama          TEXT NOT NULL,
+            jam_masuk     TEXT NOT NULL DEFAULT '08:00',
+            jam_pulang    TEXT NOT NULL DEFAULT '17:00',
+            aktif         INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
+        )",
     ];
 
     foreach ($statements as $sql) {
@@ -340,8 +382,11 @@ function migrate_schema(PDO $pdo): void
             'akurasi_pulang' => 'INT NULL',
             'jarak_masuk_m'  => 'INT NULL',
             'jarak_pulang_m' => 'INT NULL',
-            'mode'           => "VARCHAR(20) NOT NULL DEFAULT ''",
-            'kegiatan'       => "VARCHAR(500) NOT NULL DEFAULT ''",
+            'mode'              => "VARCHAR(20) NOT NULL DEFAULT ''",
+            'kegiatan'          => "VARCHAR(500) NOT NULL DEFAULT ''",
+            'shift_nama'        => "VARCHAR(100) NOT NULL DEFAULT ''",
+            'jam_jadwal_masuk'  => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'CHAR(5) NULL',
+            'jam_jadwal_pulang' => DB_DRIVER === 'sqlite' ? 'TEXT NULL' : 'CHAR(5) NULL',
         ],
     ];
 

@@ -22,6 +22,7 @@ $appJs = (string) file_get_contents(__DIR__ . '/../frontend/assets/js/app.js');
 check(str_contains($login, 'ketik-header') && str_contains($login, 'ketik-nav-strip'), 'login.html has Ketik.com editorial header & blue/teal nav bar');
 check(str_contains($login, 'ketik-logo.png') && str_contains($login, 'Ketik.com'), 'login.html displays Ketik.com logo and brand');
 check(str_contains($login, 'Scan Absensi') && str_contains($login, 'id="qr-scan-start"') && str_contains($login, 'id="qr-manual-code"'), 'login.html shows clear Scan Absensi heading with camera and manual QR input');
+check(str_contains($login, 'id="qr-shift"') && str_contains($login, 'id="qr-shift-wrap"'), 'login.html includes clean Shift Kerja dropdown without forced reason textbox');
 check(str_contains($login, 'qr-digital-card') && str_contains($login, "get('kartu')"), 'login.html renders Digital Personal QR Card from ?kartu= link');
 check(str_contains($login, "Api.post('qr.lookup'") && str_contains($login, "Api.post('qr.absen'"), 'login.html uses qr.lookup and qr.absen endpoints');
 check(str_contains($login, 'id="login-form"') && str_contains($login, 'id="toggle-pass"'), 'login.html has admin login form with password toggle');
@@ -51,6 +52,7 @@ check(!str_contains($css, '@keyframes pulseDot'), 'app.css removes pulsing dot a
 check(is_file(__DIR__ . '/../frontend/assets/img/ketik-logo.png'), 'ketik-logo.png asset exists locally');
 check(is_file(__DIR__ . '/../frontend/assets/img/ketik-icon.png'), 'ketik-icon.png asset exists locally');
 check(str_contains($appJs, 'ketik-divisi-list') && str_contains($appJs, 'Anak Magang'), 'app.js allows custom divisi & jabatan including Anak Magang');
+check(str_contains($appJs, 'div-add-form') && str_contains($appJs, 'shift-add-form') && str_contains($appJs, 'e-div-hours'), 'app.js provides division hours & shift management in Settings and live preview in employee form');
 check(!str_contains($appJs, 'id="o-industri"') && !str_contains($appJs, 'id="o-barcode"'), 'app.js removes unnecessary industry preset & unused barcode toggle from Settings');
 check(str_contains($appJs, 'openQrCard') && str_contains($appJs, 'karyawan.rotate_qr'), 'app.js provides Personal QR Card viewer/printer & QR rotation');
 check(str_contains($appJs, 'e-qr-box') && str_contains($appJs, 'Simpan &amp; Munculkan QR') && str_contains($appJs, 'res.kode_qr'), 'app.js automatically displays generated QR card right after adding a new employee');

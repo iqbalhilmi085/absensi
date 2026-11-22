@@ -8,7 +8,9 @@
     route: null,
     kmeans: null,
     axel: null,
-    tim: []
+    tim: [],
+    divisiJadwal: [],
+    shiftKerja: []
   };
 
   // ---------------- Fungsi Bantu ----------------
@@ -121,11 +123,13 @@
     if (row.mode) {
       bits.push(modeBadge(row.mode));
     }
+    const effectiveShift = (row.shift_nama || '').trim() || shiftLabel;
+    if (effectiveShift) {
+      const jamLbl = row.jam_jadwal_masuk ? ` · ${row.jam_jadwal_masuk}` : '';
+      bits.push(`<span class="shift-tag">${esc(effectiveShift + jamLbl)}</span>`);
+    }
     if (kegiatanText) {
       bits.push(`<span>${esc(kegiatanText)}</span>`);
-    }
-    if (shiftLabel) {
-      bits.push(`<span class="shift-tag">${esc(shiftLabel)}</span>`);
     }
     if (cleanNote && cleanNote !== kegiatanText) {
       bits.push(`<span class="muted small">${esc(cleanNote)}</span>`);
@@ -1271,30 +1275,112 @@
 
           <div class="glass card stack" style="height:fit-content">
             <div class="card-head">
-              <h2>Alur Presensi QR Pribadi Ketik.com</h2>
-              <span class="shift-tag">Tanpa Login Karyawan</span>
+              <h2>Jam Kerja per Divisi &amp; Shift</h2>
+              <span class="shift-tag">Otomatis</span>
             </div>
+            <p class="muted small">Jam masuk karyawan otomatis mengikuti divisinya. Jika bertukar shift, karyawan cukup memilih dari daftar shift saat scan QR.</p>
+
             <div class="config-section">
-              <div class="config-section-title"><span class="step-num">1</span> QR Otomatis per Karyawan</div>
-              <p class="muted small">Setiap karyawan redaksi yang ditambahkan otomatis mendapatkan kode &amp; kartu QR pribadi unik di menu <b>Karyawan &amp; QR</b>.</p>
+              <div class="config-section-title"><span class="step-num">A</span> Jadwal Jam per Divisi</div>
+              <div id="divisi-jadwal-list" class="stack" style="gap:8px"></div>
+              <form id="div-add-form" class="filter-grid" style="grid-template-columns:1.5fr 1fr 1fr auto;gap:8px">
+                <input id="div-nama" placeholder="Nama divisi (mis. Magang)" required>
+                <input type="time" id="div-masuk" value="09:00" required title="Jam masuk">
+                <input type="time" id="div-pulang" value="17:00" required title="Jam pulang">
+                <button type="submit" class="btn btn-primary btn-sm">+ Divisi</button>
+              </form>
             </div>
+
             <div class="config-section">
-              <div class="config-section-title"><span class="step-num">2</span> Admin Mengirimkan ke Karyawan</div>
-              <p class="muted small">Admin cukup klik <b>Kirim QR</b> untuk membagikan link kartu QR via WhatsApp, Email, unduh gambar kartu PNG, atau cetak massal.</p>
-            </div>
-            <div class="config-section">
-              <div class="config-section-title"><span class="step-num">3</span> Scan QR di Halaman Depan</div>
-              <p class="muted small">Karyawan memindai QR pribadinya di halaman portal depan, memilih <b>Kantor Redaksi (WFO)</b> atau <b>Liputan / WFH</b>, lalu mengambil foto selfie.</p>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button type="button" class="btn btn-primary btn-sm" id="set-go-qr">${ico('qr', 15)} Kelola &amp; Kirim QR Karyawan</button>
-              <a class="btn btn-secondary btn-sm" href="login.html" target="_blank" rel="noopener noreferrer">Buka Portal Scan QR</a>
+              <div class="config-section-title"><span class="step-num">B</span> Daftar Shift Pengganti</div>
+              <div id="shift-kerja-list" class="stack" style="gap:8px"></div>
+              <form id="shift-add-form" class="filter-grid" style="grid-template-columns:1.5fr 1fr 1fr auto;gap:8px">
+                <input id="shf-nama" placeholder="Nama shift (mis. Shift Malam)" required>
+                <input type="time" id="shf-masuk" value="13:00" required title="Jam masuk">
+                <input type="time" id="shf-pulang" value="21:00" required title="Jam pulang">
+                <button type="submit" class="btn btn-secondary btn-sm">+ Shift</button>
+              </form>
             </div>
           </div>
         </div>
       </div>`;
 
-    byId('set-go-qr')?.addEventListener('click', () => go('karyawan'));
+    function renderScheduleLists() {
+      const divEl = byId('divisi-jadwal-list');
+      if (divEl) {
+        divEl.innerHTML = (state.divisiJadwal || []).map((d) => `
+          <div class="mode-breakdown-row" style="padding:8px 12px">
+            <div>
+              <div style="font-weight:600;font-size:13px">${esc(d.nama)}</div>
+              <div class="cell-sub tabular">${esc(d.jam_masuk)} – ${esc(d.jam_pulang)} WIB</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" data-del-div="${d.id}">Hapus</button>
+          </div>`).join('') || '<p class="muted small">Belum ada jadwal divisi khusus (menggunakan jam kantor default).</p>';
+        divEl.querySelectorAll('[data-del-div]').forEach((b) => {
+          b.addEventListener('click', async () => {
+            try {
+              const res = await Api.post('divisi.delete', { id: Number(b.dataset.delDiv) });
+              state.divisiJadwal = res.data || [];
+              renderScheduleLists();
+              toast('Jadwal divisi dihapus');
+            } catch (e) { toast(e.message, 'err'); }
+          });
+        });
+      }
+
+      const shfEl = byId('shift-kerja-list');
+      if (shfEl) {
+        shfEl.innerHTML = (state.shiftKerja || []).map((s) => `
+          <div class="mode-breakdown-row" style="padding:8px 12px">
+            <div>
+              <div style="font-weight:600;font-size:13px">${esc(s.nama)}</div>
+              <div class="cell-sub tabular">${esc(s.jam_masuk)} – ${esc(s.jam_pulang)} WIB</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" data-del-shf="${s.id}">Hapus</button>
+          </div>`).join('') || '<p class="muted small">Belum ada daftar shift tambahan.</p>';
+        shfEl.querySelectorAll('[data-del-shf]').forEach((b) => {
+          b.addEventListener('click', async () => {
+            try {
+              const res = await Api.post('shift.delete', { id: Number(b.dataset.delShf) });
+              state.shiftKerja = res.data || [];
+              renderScheduleLists();
+              toast('Shift dihapus');
+            } catch (e) { toast(e.message, 'err'); }
+          });
+        });
+      }
+    }
+    renderScheduleLists();
+
+    byId('div-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await Api.post('divisi.save', {
+          nama: byId('div-nama').value.trim(),
+          jam_masuk: byId('div-masuk').value,
+          jam_pulang: byId('div-pulang').value
+        });
+        state.divisiJadwal = res.data || [];
+        byId('div-nama').value = '';
+        renderScheduleLists();
+        toast('Jadwal divisi disimpan');
+      } catch (err) { toast(err.message, 'err'); }
+    });
+
+    byId('shift-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await Api.post('shift.save', {
+          nama: byId('shf-nama').value.trim(),
+          jam_masuk: byId('shf-masuk').value,
+          jam_pulang: byId('shf-pulang').value
+        });
+        state.shiftKerja = res.data || [];
+        byId('shf-nama').value = '';
+        renderScheduleLists();
+        toast('Shift kerja disimpan');
+      } catch (err) { toast(err.message, 'err'); }
+    });
 
     function syncRadiusPills(val) {
       view.querySelectorAll('#o-radius-pills .quick-pill').forEach((p) => {
@@ -1644,6 +1730,10 @@
 
   function openEmpForm(u, reload) {
     const edit = !!u;
+    const divOpts = Array.from(new Set([
+      ...(state.divisiJadwal || []).map((d) => d.nama),
+      'Redaksi', 'Liputan / Jurnalis', 'Magang Redaksi', 'Editor', 'IT & Digital', 'Desain & Konten', 'Bisnis & Kemitraan', 'HR & Keuangan'
+    ]));
     const m = openModal(`
       <div class="modal-head"><h2>${edit ? 'Ubah Data' : 'Tambah'} Karyawan</h2><button class="icon-btn" type="button" data-close>×</button></div>
       <div class="form">
@@ -1653,18 +1743,15 @@
           <label class="field"><span>Hak Akses</span><select id="e-peran">${Object.entries(PERAN_LABEL).filter(([k]) => k !== 'atasan' || u?.peran === 'atasan').map(([k, v]) => `<option value="${k}" ${(u?.peran || 'karyawan') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>Divisi / Tim (Bisa Custom)</span><input id="e-tim" list="ketik-divisi-list" value="${esc(u?.tim || '')}" placeholder="Contoh: Redaksi, Liputan, atau Magang"></label>
+          <label class="field">
+            <span>Divisi / Tim (Bisa Custom)</span>
+            <input id="e-tim" list="ketik-divisi-list" value="${esc(u?.tim || '')}" placeholder="Contoh: Redaksi, Liputan, atau Magang">
+            <span class="small muted" id="e-div-hours"></span>
+          </label>
           <label class="field"><span>Jabatan / Status (Bisa Custom)</span><input id="e-jabatan" list="ketik-jabatan-list" value="${esc(u?.jabatan || '')}" placeholder="Contoh: Jurnalis, Anak Magang, atau Editor"></label>
         </div>
         <datalist id="ketik-divisi-list">
-          <option value="Redaksi">
-          <option value="Liputan / Jurnalis">
-          <option value="Magang Redaksi">
-          <option value="Editor">
-          <option value="IT & Digital">
-          <option value="Desain & Konten">
-          <option value="Bisnis & Kemitraan">
-          <option value="HR & Keuangan">
+          ${divOpts.map((n) => `<option value="${esc(n)}">`).join('')}
         </datalist>
         <datalist id="ketik-jabatan-list">
           <option value="Jurnalis / Reporter">
@@ -1718,6 +1805,16 @@
       }
       m.$('#e-open-qr')?.addEventListener('click', () => { m.close(); openQrCard(u, reload); });
     }
+    const syncDivHours = () => {
+      const val = (m.$('#e-tim').value || '').trim().toLowerCase();
+      const matched = (state.divisiJadwal || []).find((d) => d.nama.toLowerCase() === val);
+      m.$('#e-div-hours').textContent = matched
+        ? `Jam divisi: ${matched.jam_masuk}–${matched.jam_pulang} WIB`
+        : `Ikut jam default: ${state.org.jam_masuk}–${state.org.jam_pulang} WIB`;
+    };
+    m.$('#e-tim').addEventListener('input', syncDivHours);
+    syncDivHours();
+
     const syncPassField = () => {
       const peranVal = m.$('#e-peran').value;
       const isAdm = peranVal === 'admin';
@@ -1942,6 +2039,8 @@
       const meta = await Api.get('meta');
       state.meta = meta; state.user = meta.pengguna; state.org = meta.organisasi;
       state.presets = meta.preset; state.hariLabels = meta.hari;
+      state.divisiJadwal = meta.divisi_jadwal || [];
+      state.shiftKerja = meta.shift_kerja || [];
     } catch (e) {
       location.href = 'login.html';
       return;

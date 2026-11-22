@@ -163,6 +163,9 @@ check($qrAbsenNoCsrf['code'] === 419, "qr.absen requires CSRF token (got {$qrAbs
 $qrRotateGet = secReq("{$base}/backend/api.php?action=karyawan.rotate_qr&id=2");
 check($qrRotateGet['code'] === 405, "karyawan.rotate_qr rejects GET requests with 405 (got {$qrRotateGet['code']})");
 
+$forgedShift = secReq("{$base}/backend/api.php?action=qr.absen", $ckKary, ['kode_qr' => 'KTK-SEC-AKTIF-01', 'mode' => 'wfo', 'shift_id' => 999999], $csrfPub);
+check($forgedShift['code'] === 422, "qr.absen rejects forged shift_id=999999 with 422 (got {$forgedShift['code']})");
+
 $qrAbsenRate = false;
 for ($i = 0; $i < 13; $i++) {
     $r = secReq("{$base}/backend/api.php?action=qr.absen", $ckKary, ['kode_qr' => "BAD-{$i}"], $csrfPub);
@@ -195,5 +198,18 @@ $badKlasterK = secReq("{$base}/backend/api.php?action=klaster.save", $ckAdm, [
     'periode' => '2026-11', 'k' => 999, 'hasil' => []
 ], $csrfAdm);
 check($badKlasterK['code'] === 422, "klaster.save rejects out-of-range k=999 with 422 (got {$badKlasterK['code']})");
+
+// E) Division & shift endpoint security checks
+$divUnauth = secReq("{$base}/backend/api.php?action=divisi.save", $ckKary, ['nama' => 'Rogue', 'jam_masuk' => '08:00', 'jam_pulang' => '17:00'], $csrfPub);
+check($divUnauth['code'] === 401, "divisi.save rejects unauthenticated POST with 401 (got {$divUnauth['code']})");
+
+$divGet = secReq("{$base}/backend/api.php?action=divisi.save", $ckAdm);
+check($divGet['code'] === 405, "divisi.save rejects GET with 405 (got {$divGet['code']})");
+
+$divBadTime = secReq("{$base}/backend/api.php?action=divisi.save", $ckAdm, ['nama' => 'Tim A', 'jam_masuk' => '29:00', 'jam_pulang' => '17:00'], $csrfAdm);
+check($divBadTime['code'] === 422, "divisi.save rejects invalid time 29:00 with 422 (got {$divBadTime['code']})");
+
+$shiftBadTime = secReq("{$base}/backend/api.php?action=shift.save", $ckAdm, ['nama' => 'Shift X', 'jam_masuk' => '08:00', 'jam_pulang' => 'xx:yy'], $csrfAdm);
+check($shiftBadTime['code'] === 422, "shift.save rejects invalid time xx:yy with 422 (got {$shiftBadTime['code']})");
 
 exit($failures > 0 ? 1 : 0);

@@ -49,6 +49,25 @@ check($schedOffice === '08:00', "jadwal_shift_row ignores 'pagi' inside kegiatan
 $schedLegacy = jadwal_shift_row(['catatan' => 'Shift: Pagi (06:00-14:00)', 'kegiatan' => ''], '08:00');
 check($schedLegacy === '06:00', "jadwal_shift_row keeps matching explicit 'Shift: Pagi' (got {$schedLegacy})");
 
+// Division schedules, shift resolution, cross-midnight check-in, and snapshot lateness
+$orgRow = get_org(1);
+$divSched = resolve_employee_schedule($orgRow, 'Liputan / Jurnalis', null);
+check($divSched['jam_masuk'] === '09:00' && $divSched['jam_pulang'] === '18:00', "resolve_employee_schedule uses Liputan/Jurnalis hours 09:00-18:00 (got {$divSched['jam_masuk']}-{$divSched['jam_pulang']})");
+
+$shifts = list_shift_kerja(1);
+$nightShift = array_values(array_filter($shifts, fn($s) => $s['nama'] === 'Shift Malam'))[0] ?? null;
+check($nightShift !== null && $nightShift['jam_masuk'] === '22:00', 'list_shift_kerja includes overnight Shift Malam (22:00-06:00)');
+
+$ovSched = resolve_employee_schedule($orgRow, 'Liputan / Jurnalis', (int) ($nightShift['id'] ?? 0));
+check($ovSched['jam_masuk'] === '22:00' && $ovSched['sumber'] === 'shift', 'resolve_employee_schedule overrides division hours when shift_id is supplied');
+
+check(hitung_status_masuk_jadwal('09:00', 15, '09:12:00') === 'hadir', 'hitung_status_masuk_jadwal treats 09:12 on 09:00+15m shift as hadir');
+check(hitung_status_masuk_jadwal('09:00', 15, '09:20:00') === 'terlambat', 'hitung_status_masuk_jadwal treats 09:20 on 09:00+15m shift as terlambat');
+check(hitung_status_masuk_jadwal('22:00', 15, '00:10:00') === 'terlambat', 'hitung_status_masuk_jadwal treats 00:10 after 22:00 overnight shift as terlambat');
+
+$lateSnap = hitung_terlambat_row(['tanggal' => '2026-11-23', 'jam_masuk' => '13:20:00', 'jam_jadwal_masuk' => '13:00', 'catatan' => ''], '08:00', 15);
+check($lateSnap === 5, "hitung_terlambat_row uses snapshot jam_jadwal_masuk=13:00 (got {$lateSnap})");
+
 // HTTP integration checks via ephemeral server
 $port = 18092;
 $routerFile = tempnam(sys_get_temp_dir(), 'router2_') . '.php';

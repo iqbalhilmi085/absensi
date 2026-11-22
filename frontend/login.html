@@ -126,6 +126,13 @@
                 <div class="muted small" id="qr-mode-hint" style="margin-top:4px"></div>
               </div>
 
+              <label class="field" id="qr-shift-wrap">
+                <span>Shift Kerja Hari Ini</span>
+                <select id="qr-shift">
+                  <option value="">Sesuai Jadwal Divisi</option>
+                </select>
+              </label>
+
               <label class="field">
                 <span id="qr-keg-label">Catatan Liputan / Kegiatan</span>
                 <textarea id="qr-kegiatan" placeholder="Contoh: Liputan konferensi pers di Balai Kota dan kirim berita ke redaktur"></textarea>
@@ -287,8 +294,19 @@
       byId('qr-submit-err').hidden = true;
       byId('qr-submit-ok').hidden = true;
 
+      const jDiv = data.jadwal_divisi || {};
+      const schedLabel = jDiv.jam_masuk && jDiv.jam_pulang ? ` · ${jDiv.jam_masuk}–${jDiv.jam_pulang} WIB` : '';
       byId('qr-emp-nama').textContent = k.nama;
-      byId('qr-emp-meta').textContent = `${k.tim}${k.jabatan ? ' · ' + k.jabatan : ''}`;
+      byId('qr-emp-meta').textContent = `${k.tim}${k.jabatan ? ' · ' + k.jabatan : ''}${schedLabel}`;
+
+      const shiftSel = byId('qr-shift');
+      if (shiftSel) {
+        const divOpt = `<option value="">Sesuai Divisi (${jDiv.jam_masuk || '08:00'}–${jDiv.jam_pulang || '17:00'})</option>`;
+        const shiftOpts = (data.shifts || []).map((s) => `<option value="${s.id}">${s.nama} (${s.jam_masuk}–${s.jam_pulang})</option>`).join('');
+        shiftSel.innerHTML = divOpt + shiftOpts;
+        shiftSel.value = '';
+      }
+
       const digiBox = byId('qr-digital-card');
       if (digiBox && window.qrcode && activeQrCode) {
         try {
@@ -307,16 +325,18 @@
         byId('qr-done-box').hidden = true;
         byId('qr-form-box').hidden = false;
         byId('qr-mode-wrap').hidden = false;
+        if (byId('qr-shift-wrap')) byId('qr-shift-wrap').hidden = false;
         byId('qr-kegiatan').value = '';
         selectedMode = 'wfo';
         byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b.dataset.mode === 'wfo'));
         byId('qr-submit-btn').textContent = 'Ambil Foto & Kirim Absen Masuk';
       } else if (h.state === 'out') {
         badgeEl.className = 'badge badge-hadir';
-        badgeEl.textContent = `Masuk ${String(h.jam_masuk || '').slice(0, 5)}`;
+        badgeEl.textContent = `Masuk ${String(h.jam_masuk || '').slice(0, 5)}${h.shift_nama ? ' · ' + h.shift_nama : ''}`;
         byId('qr-done-box').hidden = true;
         byId('qr-form-box').hidden = false;
         byId('qr-mode-wrap').hidden = true;
+        if (byId('qr-shift-wrap')) byId('qr-shift-wrap').hidden = true;
         selectedMode = (h.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo';
         byId('qr-kegiatan').value = h.kegiatan || '';
         byId('qr-submit-btn').textContent = 'Ambil Foto & Kirim Absen Pulang';
@@ -438,6 +458,7 @@
         const payload = {
           kode_qr: activeQrCode,
           mode: modeUsed,
+          shift_id: activeLookup.hari_ini.state === 'in' && byId('qr-shift') ? (Number(byId('qr-shift').value) || 0) : 0,
           kegiatan: kegiatanVal,
           foto: shot.foto,
           palsu: !!shot.palsu

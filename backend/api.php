@@ -56,10 +56,13 @@ function route(string $action, string $method): void
 
         case 'meta':
             $user = require_login();
+            $orgIdMeta = (int) $user['organisasi_id'];
             json_response([
                 'ok' => true,
                 'pengguna' => public_user($user),
-                'organisasi' => get_org((int) $user['organisasi_id']),
+                'organisasi' => get_org($orgIdMeta),
+                'divisi_jadwal' => list_divisi_jadwal($orgIdMeta),
+                'shift_kerja' => list_shift_kerja($orgIdMeta),
                 'preset' => preset_industri(),
                 'hari' => hari_label(),
                 'tanggal' => date('Y-m-d'),
@@ -70,6 +73,46 @@ function route(string $action, string $method): void
             $user = require_role(['admin']);
             update_org($user);
             json_response(['ok' => true, 'organisasi' => get_org((int) $user['organisasi_id'])]);
+
+        case 'divisi.list':
+            $user = require_role(['admin']);
+            json_response(['ok' => true, 'data' => list_divisi_jadwal((int) $user['organisasi_id'])]);
+
+        case 'divisi.save':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            $user = require_role(['admin']);
+            $savedDiv = save_divisi_jadwal($user, input_json());
+            json_response(['ok' => true, 'id' => $savedDiv, 'data' => list_divisi_jadwal((int) $user['organisasi_id'])]);
+
+        case 'divisi.delete':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            $user = require_role(['admin']);
+            delete_divisi_jadwal($user, (int) param('id', 0));
+            json_response(['ok' => true, 'data' => list_divisi_jadwal((int) $user['organisasi_id'])]);
+
+        case 'shift.list':
+            $user = require_role(['admin']);
+            json_response(['ok' => true, 'data' => list_shift_kerja((int) $user['organisasi_id'])]);
+
+        case 'shift.save':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            $user = require_role(['admin']);
+            $savedShift = save_shift_kerja($user, input_json());
+            json_response(['ok' => true, 'id' => $savedShift, 'data' => list_shift_kerja((int) $user['organisasi_id'])]);
+
+        case 'shift.delete':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            $user = require_role(['admin']);
+            delete_shift_kerja($user, (int) param('id', 0));
+            json_response(['ok' => true, 'data' => list_shift_kerja((int) $user['organisasi_id'])]);
 
         case 'karyawan.list':
             $user = require_role(['admin', 'atasan']);
@@ -108,6 +151,8 @@ function route(string $action, string $method): void
             }
             $rec = today_record((int) $found['id']);
             $org = get_org((int) $found['organisasi_id']);
+            $jadwalDiv = resolve_employee_schedule($org, (string) ($found['tim'] ?? ''), null);
+            $shifts = list_shift_kerja((int) $found['organisasi_id']);
             $stateToday = (!$rec || !$rec['jam_masuk']) ? 'in' : (!$rec['jam_pulang'] ? 'out' : 'done');
             json_response([
                 'ok' => true,
@@ -117,6 +162,8 @@ function route(string $action, string $method): void
                         'tim' => $found['tim'],
                         'jabatan' => $found['jabatan'],
                     ],
+                    'jadwal_divisi' => $jadwalDiv,
+                    'shifts' => $shifts,
                     'hari_ini' => [
                         'state' => $stateToday,
                         'jam_masuk' => $rec['jam_masuk'] ?? null,
@@ -124,11 +171,14 @@ function route(string $action, string $method): void
                         'mode' => $rec['mode'] ?? null,
                         'kegiatan' => $rec['kegiatan'] ?? '',
                         'status' => $rec['status'] ?? null,
+                        'shift_nama' => $rec['shift_nama'] ?? '',
+                        'jam_jadwal_masuk' => $rec['jam_jadwal_masuk'] ?? null,
+                        'jam_jadwal_pulang' => $rec['jam_jadwal_pulang'] ?? null,
                     ],
                     'aturan' => [
                         'nama' => $org['nama'] ?? APP_NAME,
-                        'jam_masuk' => $org['jam_masuk'] ?? '08:00',
-                        'jam_pulang' => $org['jam_pulang'] ?? '17:00',
+                        'jam_masuk' => $jadwalDiv['jam_masuk'],
+                        'jam_pulang' => $jadwalDiv['jam_pulang'],
                         'toleransi_menit' => (int) ($org['toleransi_menit'] ?? 15),
                         'wajib_foto' => (bool) ($org['wajib_foto'] ?? 1),
                         'wajib_gps' => (int) ($org['wajib_gps'] ?? 0) === 1,
@@ -148,6 +198,8 @@ function route(string $action, string $method): void
             if (!$found) {
                 json_error('Kode QR karyawan tidak dikenali atau sudah tidak aktif.', 404);
             }
+            $shiftIdRaw = param('shift_id', 0);
+            $shiftId = is_numeric($shiftIdRaw) && (int) $shiftIdRaw > 0 ? (int) $shiftIdRaw : null;
             $rec = today_record((int) $found['id']);
             if (!$rec || !$rec['jam_masuk']) {
                 $res = do_checkin(
@@ -161,7 +213,8 @@ function route(string $action, string $method): void
                     (bool) param('palsu', false),
                     param_str('kegiatan') ?: null,
                     (int) $found['karyawan_id'],
-                    true
+                    true,
+                    $shiftId
                 );
                 $res['tipe'] = 'masuk';
                 $res['nama'] = $found['nama'];
@@ -472,9 +525,109 @@ function list_karyawan(int $orgId): array
 
 function list_tim(int $orgId): array
 {
-    $stmt = db()->prepare("SELECT DISTINCT tim FROM pengguna WHERE organisasi_id = ? AND peran = 'karyawan' AND tim <> '' ORDER BY tim");
-    $stmt->execute([$orgId]);
-    return array_column($stmt->fetchAll(), 'tim');
+    $pdo = db();
+    seed_divisi_shift_defaults($pdo, $orgId);
+    $stmt1 = $pdo->prepare("SELECT DISTINCT tim FROM pengguna WHERE organisasi_id = ? AND peran = 'karyawan' AND tim <> ''");
+    $stmt1->execute([$orgId]);
+    $stmt2 = $pdo->prepare('SELECT nama FROM divisi_jadwal WHERE organisasi_id = ?');
+    $stmt2->execute([$orgId]);
+    $merged = array_values(array_unique(array_merge(
+        array_column($stmt1->fetchAll(), 'tim'),
+        array_column($stmt2->fetchAll(), 'nama')
+    )));
+    sort($merged, SORT_NATURAL | SORT_FLAG_CASE);
+    return $merged;
+}
+
+function save_divisi_jadwal(array $actor, array $data): int
+{
+    $id = (int) ($data['id'] ?? 0);
+    $nama = clean_text($data['nama'] ?? '', 100);
+    $jm = (string) ($data['jam_masuk'] ?? '');
+    $jp = (string) ($data['jam_pulang'] ?? '');
+    if ($nama === '') {
+        json_error('Nama divisi wajib diisi.', 422);
+    }
+    if (!valid_time_hm($jm) || !valid_time_hm($jp)) {
+        json_error('Format jam divisi harus HH:MM.', 422);
+    }
+    $pdo = db();
+    $orgId = (int) $actor['organisasi_id'];
+    $dup = $pdo->prepare('SELECT id FROM divisi_jadwal WHERE organisasi_id = ? AND LOWER(nama) = LOWER(?) AND id <> ?');
+    $dup->execute([$orgId, $nama, $id]);
+    if ($dup->fetch()) {
+        json_error('Nama divisi sudah ada.', 409);
+    }
+    if ($id > 0) {
+        $chk = $pdo->prepare('SELECT id FROM divisi_jadwal WHERE id = ? AND organisasi_id = ?');
+        $chk->execute([$id, $orgId]);
+        if (!$chk->fetch()) {
+            json_error('Divisi tidak ditemukan.', 404);
+        }
+        $pdo->prepare('UPDATE divisi_jadwal SET nama = ?, jam_masuk = ?, jam_pulang = ? WHERE id = ? AND organisasi_id = ?')
+            ->execute([$nama, $jm, $jp, $id, $orgId]);
+        write_audit((int) $actor['id'], $orgId, 'save_divisi', "{$nama} {$jm}-{$jp}");
+        return $id;
+    }
+    $pdo->prepare('INSERT INTO divisi_jadwal (organisasi_id, nama, jam_masuk, jam_pulang, dibuat_pada) VALUES (?, ?, ?, ?, ?)')
+        ->execute([$orgId, $nama, $jm, $jp, date('Y-m-d H:i:s')]);
+    $newId = (int) $pdo->lastInsertId();
+    write_audit((int) $actor['id'], $orgId, 'save_divisi', "{$nama} {$jm}-{$jp}");
+    return $newId;
+}
+
+function delete_divisi_jadwal(array $actor, int $id): void
+{
+    $orgId = (int) $actor['organisasi_id'];
+    $st = db()->prepare('DELETE FROM divisi_jadwal WHERE id = ? AND organisasi_id = ?');
+    $st->execute([$id, $orgId]);
+    if ($st->rowCount() === 0) {
+        json_error('Divisi tidak ditemukan.', 404);
+    }
+    write_audit((int) $actor['id'], $orgId, 'delete_divisi', "id={$id}");
+}
+
+function save_shift_kerja(array $actor, array $data): int
+{
+    $id = (int) ($data['id'] ?? 0);
+    $nama = clean_text($data['nama'] ?? '', 100);
+    $jm = (string) ($data['jam_masuk'] ?? '');
+    $jp = (string) ($data['jam_pulang'] ?? '');
+    if ($nama === '') {
+        json_error('Nama shift wajib diisi.', 422);
+    }
+    if (!valid_time_hm($jm) || !valid_time_hm($jp)) {
+        json_error('Format jam shift harus HH:MM.', 422);
+    }
+    $pdo = db();
+    $orgId = (int) $actor['organisasi_id'];
+    if ($id > 0) {
+        $chk = $pdo->prepare('SELECT id FROM shift_kerja WHERE id = ? AND organisasi_id = ?');
+        $chk->execute([$id, $orgId]);
+        if (!$chk->fetch()) {
+            json_error('Shift tidak ditemukan.', 404);
+        }
+        $pdo->prepare('UPDATE shift_kerja SET nama = ?, jam_masuk = ?, jam_pulang = ? WHERE id = ? AND organisasi_id = ?')
+            ->execute([$nama, $jm, $jp, $id, $orgId]);
+        write_audit((int) $actor['id'], $orgId, 'save_shift', "{$nama} {$jm}-{$jp}");
+        return $id;
+    }
+    $pdo->prepare('INSERT INTO shift_kerja (organisasi_id, nama, jam_masuk, jam_pulang, aktif) VALUES (?, ?, ?, ?, 1)')
+        ->execute([$orgId, $nama, $jm, $jp]);
+    $newId = (int) $pdo->lastInsertId();
+    write_audit((int) $actor['id'], $orgId, 'save_shift', "{$nama} {$jm}-{$jp}");
+    return $newId;
+}
+
+function delete_shift_kerja(array $actor, int $id): void
+{
+    $orgId = (int) $actor['organisasi_id'];
+    $st = db()->prepare('UPDATE shift_kerja SET aktif = 0 WHERE id = ? AND organisasi_id = ?');
+    $st->execute([$id, $orgId]);
+    if ($st->rowCount() === 0) {
+        json_error('Shift tidak ditemukan.', 404);
+    }
+    write_audit((int) $actor['id'], $orgId, 'delete_shift', "id={$id}");
 }
 
 function sync_karyawan_qr_row(PDO $pdo, int $orgId, int $penggunaId, string $nama, string $peran, string $tim, string $jabatan, int $aktif, string $now): ?string
@@ -632,7 +785,7 @@ function own_today(array $user): array
 
 function daftar_harian(int $orgId, string $tanggal): array
 {
-    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.mode, a.catatan, a.kegiatan, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
+    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.mode, a.catatan, a.kegiatan, a.shift_nama, a.jam_jadwal_masuk, a.jam_jadwal_pulang, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
         FROM pengguna u
         LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ?
         WHERE u.organisasi_id = ? AND u.peran = 'karyawan' AND u.aktif = 1
@@ -770,7 +923,7 @@ function axel_dataset(array $user): array
     }
 
     $sql = "SELECT a.id, a.pengguna_id, a.tanggal, u.nama, u.tim, u.jabatan, a.status, a.jam_masuk, a.jam_pulang,
-                   a.foto_masuk, a.foto_pulang, a.barcode_masuk, a.mode, a.catatan, a.kegiatan,
+                   a.foto_masuk, a.foto_pulang, a.barcode_masuk, a.mode, a.catatan, a.kegiatan, a.shift_nama, a.jam_jadwal_masuk, a.jam_jadwal_pulang,
                    k.nama AS dikoreksi_nama
             FROM absensi a
             JOIN pengguna u ON u.id = a.pengguna_id

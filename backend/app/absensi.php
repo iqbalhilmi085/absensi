@@ -41,8 +41,117 @@ function is_hari_kerja(array $org, string $date): bool
 
 function hitung_status_masuk(array $org, string $jamMasuk): string
 {
-    $batas = strtotime(date('Y-m-d') . ' ' . $org['jam_masuk']) + ((int) $org['toleransi_menit'] * 60);
-    return strtotime(date('Y-m-d') . ' ' . $jamMasuk) > $batas ? 'terlambat' : 'hadir';
+    return hitung_status_masuk_jadwal((string) ($org['jam_masuk'] ?? '08:00'), (int) ($org['toleransi_menit'] ?? 15), $jamMasuk);
+}
+
+function hitung_status_masuk_jadwal(string $jamJadwalMasuk, int $toleransiMenit, string $jamMasukAktual): string
+{
+    $today = date('Y-m-d');
+    $jadwalTs = strtotime($today . ' ' . $jamJadwalMasuk);
+    $aktualTs = strtotime($today . ' ' . $jamMasukAktual);
+    $hJadwal = (int) substr($jamJadwalMasuk, 0, 2);
+    $hAktual = (int) substr($jamMasukAktual, 0, 2);
+    if ($hJadwal >= 20 && $hAktual < 6) {
+        $aktualTs += 86400;
+    } elseif ($hJadwal <= 2 && $hAktual >= 20) {
+        $aktualTs -= 86400;
+    }
+    return $aktualTs > ($jadwalTs + ($toleransiMenit * 60)) ? 'terlambat' : 'hadir';
+}
+
+function seed_divisi_shift_defaults(PDO $pdo, int $orgId): void
+{
+    $cntDiv = (int) $pdo->query("SELECT COUNT(*) FROM divisi_jadwal WHERE organisasi_id = {$orgId}")->fetchColumn();
+    if ($cntDiv === 0) {
+        $now = date('Y-m-d H:i:s');
+        $insDiv = $pdo->prepare('INSERT INTO divisi_jadwal (organisasi_id, nama, jam_masuk, jam_pulang, dibuat_pada) VALUES (?, ?, ?, ?, ?)');
+        foreach ([
+            ['Redaksi', '08:00', '17:00'],
+            ['Liputan / Jurnalis', '09:00', '18:00'],
+            ['Editor', '10:00', '19:00'],
+            ['Magang Redaksi', '09:00', '15:00'],
+            ['IT & Digital', '08:30', '17:30'],
+        ] as [$nama, $jm, $jp]) {
+            $insDiv->execute([$orgId, $nama, $jm, $jp, $now]);
+        }
+    }
+
+    $cntShift = (int) $pdo->query("SELECT COUNT(*) FROM shift_kerja WHERE organisasi_id = {$orgId}")->fetchColumn();
+    if ($cntShift === 0) {
+        $insShift = $pdo->prepare('INSERT INTO shift_kerja (organisasi_id, nama, jam_masuk, jam_pulang, aktif) VALUES (?, ?, ?, ?, 1)');
+        foreach ([
+            ['Shift Pagi', '06:00', '14:00'],
+            ['Shift Siang', '13:00', '21:00'],
+            ['Shift Malam', '22:00', '06:00'],
+        ] as [$nama, $jm, $jp]) {
+            $insShift->execute([$orgId, $nama, $jm, $jp]);
+        }
+    }
+}
+
+function list_divisi_jadwal(int $orgId): array
+{
+    $pdo = db();
+    seed_divisi_shift_defaults($pdo, $orgId);
+    $stmt = $pdo->prepare('SELECT id, nama, jam_masuk, jam_pulang FROM divisi_jadwal WHERE organisasi_id = ? ORDER BY nama');
+    $stmt->execute([$orgId]);
+    return $stmt->fetchAll();
+}
+
+function list_shift_kerja(int $orgId): array
+{
+    $pdo = db();
+    seed_divisi_shift_defaults($pdo, $orgId);
+    $stmt = $pdo->prepare('SELECT id, nama, jam_masuk, jam_pulang FROM shift_kerja WHERE organisasi_id = ? AND aktif = 1 ORDER BY jam_masuk, id');
+    $stmt->execute([$orgId]);
+    return $stmt->fetchAll();
+}
+
+function resolve_employee_schedule(array $org, string $tim, ?int $shiftId = null): array
+{
+    $orgId = (int) ($org['id'] ?? 1);
+    $pdo = db();
+    seed_divisi_shift_defaults($pdo, $orgId);
+
+    if ($shiftId !== null && $shiftId > 0) {
+        $st = $pdo->prepare('SELECT id, nama, jam_masuk, jam_pulang FROM shift_kerja WHERE id = ? AND organisasi_id = ? AND aktif = 1');
+        $st->execute([$shiftId, $orgId]);
+        $row = $st->fetch();
+        if (!$row) {
+            json_error('Shift kerja yang dipilih tidak ditemukan atau sudah tidak aktif.', 422);
+        }
+        return [
+            'shift_id' => (int) $row['id'],
+            'shift_nama' => $row['nama'],
+            'jam_masuk' => $row['jam_masuk'],
+            'jam_pulang' => $row['jam_pulang'],
+            'sumber' => 'shift',
+        ];
+    }
+
+    $timClean = trim($tim);
+    if ($timClean !== '') {
+        $st = $pdo->prepare('SELECT nama, jam_masuk, jam_pulang FROM divisi_jadwal WHERE organisasi_id = ? AND LOWER(nama) = LOWER(?) LIMIT 1');
+        $st->execute([$orgId, $timClean]);
+        $divRow = $st->fetch();
+        if ($divRow) {
+            return [
+                'shift_id' => 0,
+                'shift_nama' => 'Divisi ' . $divRow['nama'],
+                'jam_masuk' => $divRow['jam_masuk'],
+                'jam_pulang' => $divRow['jam_pulang'],
+                'sumber' => 'divisi',
+            ];
+        }
+    }
+
+    return [
+        'shift_id' => 0,
+        'shift_nama' => $timClean !== '' ? 'Divisi ' . $timClean : 'Reguler Kantor',
+        'jam_masuk' => (string) ($org['jam_masuk'] ?? '08:00'),
+        'jam_pulang' => (string) ($org['jam_pulang'] ?? '17:00'),
+        'sumber' => 'kantor',
+    ];
 }
 
 function mode_options(): array
@@ -140,7 +249,7 @@ function resolve_personal_qr(string $kodeQr): ?array
     return $row ?: null;
 }
 
-function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null, ?int $karyawanId = null, bool $bypassOfficeBarcode = false): array
+function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null, ?int $karyawanId = null, bool $bypassOfficeBarcode = false, ?int $shiftId = null): array
 {
     $org = get_org((int) $user['organisasi_id']);
     $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
@@ -155,6 +264,7 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
     if ((int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto wajib diambil untuk absen masuk.', 422);
     }
+    $jadwal = resolve_employee_schedule($org, (string) ($user['tim'] ?? ''), $shiftId);
     $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu, $mode);
     $fotoName = save_photo($foto, 'masuk');
 
@@ -174,17 +284,17 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
 
         // Zona waktu & jam diambil dari peladen, bukan dari perangkat klien.
         $now = date('H:i:s');
-        $status = hitung_status_masuk($org, $now);
+        $status = hitung_status_masuk_jadwal($jadwal['jam_masuk'], (int) ($org['toleransi_menit'] ?? 15), $now);
         $ts = date('Y-m-d H:i:s');
         $kodeLokasi = $mode === 'wfh' ? '' : clean_text($barcode ?: ($user['kode_qr'] ?? ''), 100);
         if ($existing) {
-            $upd = $pdo->prepare('UPDATE absensi SET karyawan_id = COALESCE(?, karyawan_id), status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, kegiatan = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
-            $upd->execute([$karyawanId, $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, '', $ts, $existing['id']]);
+            $upd = $pdo->prepare('UPDATE absensi SET karyawan_id = COALESCE(?, karyawan_id), status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, kegiatan = ?, shift_nama = ?, jam_jadwal_masuk = ?, jam_jadwal_pulang = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
+            $upd->execute([$karyawanId, $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, $jadwal['shift_nama'], $jadwal['jam_masuk'], $jadwal['jam_pulang'], '', $ts, $existing['id']]);
         } else {
-            $ins = $pdo->prepare('INSERT INTO absensi (karyawan_id, pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, kegiatan, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $ins->execute([$karyawanId, $user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, $ts, $ts]);
+            $ins = $pdo->prepare('INSERT INTO absensi (karyawan_id, pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, kegiatan, shift_nama, jam_jadwal_masuk, jam_jadwal_pulang, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $ins->execute([$karyawanId, $user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, $jadwal['shift_nama'], $jadwal['jam_masuk'], $jadwal['jam_pulang'], $ts, $ts]);
         }
-        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_in', "masuk {$now} status={$status} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode}");
+        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_in', "masuk {$now} status={$status} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode} shift={$jadwal['shift_nama']}");
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -193,7 +303,17 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
         throw $e;
     }
 
-    return ['status' => $status, 'jam_masuk' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode, 'kegiatan' => $kegiatanClean];
+    return [
+        'status' => $status,
+        'jam_masuk' => $now,
+        'foto' => $fotoName,
+        'jarak' => $gps['jarak'],
+        'mode' => $mode,
+        'kegiatan' => $kegiatanClean,
+        'shift_nama' => $jadwal['shift_nama'],
+        'jam_jadwal_masuk' => $jadwal['jam_masuk'],
+        'jam_jadwal_pulang' => $jadwal['jam_pulang'],
+    ];
 }
 
 function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null, ?int $karyawanId = null, bool $bypassOfficeBarcode = false): array
@@ -234,7 +354,9 @@ function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, 
         }
 
         $now = date('H:i:s');
-        if (strtotime($now) < strtotime((string) $existing['jam_masuk'])) {
+        $isOvernight = !empty($existing['jam_jadwal_masuk']) && !empty($existing['jam_jadwal_pulang'])
+            && $existing['jam_jadwal_pulang'] < $existing['jam_jadwal_masuk'];
+        if (!$isOvernight && strtotime($now) < strtotime((string) $existing['jam_masuk'])) {
             $pdo->rollBack();
             json_error('Jam pulang tidak boleh lebih awal dari jam masuk.', 422);
         }
@@ -383,10 +505,12 @@ function hitung_terlambat_row(array $r, string $defaultJamMasuk, int $toleransi)
     if (empty($r['jam_masuk'])) {
         return null;
     }
-    $jamJadwal = jadwal_shift_row($r, $defaultJamMasuk);
+    $jamJadwal = !empty($r['jam_jadwal_masuk']) ? (string) $r['jam_jadwal_masuk'] : jadwal_shift_row($r, $defaultJamMasuk);
     $jadwalTs = strtotime($r['tanggal'] . ' ' . $jamJadwal);
     $masukTs = strtotime($r['tanggal'] . ' ' . $r['jam_masuk']);
-    if ($jamJadwal === '22:00' && (int) substr((string) $r['jam_masuk'], 0, 2) < 12) {
+    $hJadwal = (int) substr($jamJadwal, 0, 2);
+    $hMasuk = (int) substr((string) $r['jam_masuk'], 0, 2);
+    if ($hJadwal >= 20 && $hMasuk < 12) {
         $masukTs += 86400;
     }
     $late = (int) round(($masukTs - $jadwalTs) / 60);
