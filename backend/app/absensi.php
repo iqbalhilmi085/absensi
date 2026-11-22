@@ -55,11 +55,12 @@ function mode_options(): array
  * jarak dari perangkat: koordinat dihitung ulang terhadap lokasi kantor
  * memakai Haversine. Mengembalikan lat, lng, akurasi, dan jarak (meter).
  */
-function resolve_gps(array $org, $latRaw, $lngRaw, $akurasiRaw, bool $palsu): array
+function resolve_gps(array $org, $latRaw, $lngRaw, $akurasiRaw, bool $palsu, string $mode = 'wfo'): array
 {
     $kosong = ['lat' => null, 'lng' => null, 'akurasi' => null, 'jarak' => null];
-    $wajib = (int) ($org['wajib_gps'] ?? 0) === 1;
-    $radius = (int) ($org['radius_masuk_m'] ?? 0);
+    $isWfh = $mode === 'wfh';
+    $wajib = !$isWfh && (int) ($org['wajib_gps'] ?? 0) === 1;
+    $radius = $isWfh ? 0 : (int) ($org['radius_masuk_m'] ?? 0);
     $adaKoordinat = $latRaw !== null && $latRaw !== '' && $lngRaw !== null && $lngRaw !== '';
 
     if (!$wajib && $radius === 0 && !$adaKoordinat) {
@@ -110,17 +111,22 @@ function resolve_gps(array $org, $latRaw, $lngRaw, $akurasiRaw, bool $palsu): ar
     return ['lat' => $lat, 'lng' => $lng, 'akurasi' => $akurasi, 'jarak' => $jarak];
 }
 
-function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false): array
+function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null): array
 {
     $org = get_org((int) $user['organisasi_id']);
-    if (!valid_barcode($org, $barcode)) {
+    $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
+    $kegiatanClean = clean_text($kegiatan, 500);
+    $kegLen = function_exists('mb_strlen') ? mb_strlen($kegiatanClean, 'UTF-8') : strlen($kegiatanClean);
+    if ($mode === 'wfh' && $kegLen < 3) {
+        json_error('Catatan kegiatan wajib diisi minimal 3 karakter untuk absen WFH.', 422);
+    }
+    if ($mode !== 'wfh' && !valid_barcode($org, $barcode)) {
         json_error('Barcode tidak dikenali. Pastikan Anda memindai barcode lokasi yang benar.', 422);
     }
     if ((int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto wajib diambil untuk absen masuk.', 422);
     }
-    $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
-    $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu);
+    $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu, $mode);
     $fotoName = save_photo($foto, 'masuk');
 
     $pdo = db();
@@ -141,13 +147,13 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
         $now = date('H:i:s');
         $status = hitung_status_masuk($org, $now);
         $ts = date('Y-m-d H:i:s');
-        $kodeLokasi = clean_text($barcode, 100);
+        $kodeLokasi = $mode === 'wfh' ? '' : clean_text($barcode, 100);
         if ($existing) {
-            $upd = $pdo->prepare('UPDATE absensi SET status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
-            $upd->execute([$status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, '', $ts, $existing['id']]);
+            $upd = $pdo->prepare('UPDATE absensi SET status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, kegiatan = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
+            $upd->execute([$status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, '', $ts, $existing['id']]);
         } else {
-            $ins = $pdo->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $ins->execute([$user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $ts, $ts]);
+            $ins = $pdo->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, kegiatan, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $ins->execute([$user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, $ts, $ts]);
         }
         write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_in', "masuk {$now} status={$status} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode}");
         $pdo->commit();
@@ -158,20 +164,28 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
         throw $e;
     }
 
-    return ['status' => $status, 'jam_masuk' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode];
+    return ['status' => $status, 'jam_masuk' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode, 'kegiatan' => $kegiatanClean];
 }
 
 function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null): array
 {
     $org = get_org((int) $user['organisasi_id']);
-    if (!valid_barcode($org, $barcode)) {
+    $existingPre = today_record((int) $user['id']);
+    $modeEfektif = in_array((string) $mode, mode_options(), true)
+        ? (string) $mode
+        : (($existingPre['mode'] ?? '') ?: 'wfo');
+    $kegiatanClean = clean_text($kegiatan, 500);
+    $kegLen = function_exists('mb_strlen') ? mb_strlen($kegiatanClean, 'UTF-8') : strlen($kegiatanClean);
+    if ($modeEfektif === 'wfh' && $kegLen < 3) {
+        json_error('Ringkasan kegiatan wajib diisi minimal 3 karakter untuk absen pulang WFH.', 422);
+    }
+    if ($modeEfektif !== 'wfh' && !valid_barcode($org, $barcode)) {
         json_error('Barcode tidak dikenali. Pastikan Anda memindai barcode lokasi yang benar.', 422);
     }
     if ((int) $org['wajib_foto'] && empty($foto)) {
         json_error('Foto wajib diambil untuk absen pulang.', 422);
     }
-    $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
-    $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu);
+    $gps = resolve_gps($org, $lat, $lng, $akurasi, $palsu, $modeEfektif);
     $fotoName = save_photo($foto, 'pulang');
 
     $pdo = db();
@@ -195,10 +209,11 @@ function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, 
             $pdo->rollBack();
             json_error('Jam pulang tidak boleh lebih awal dari jam masuk.', 422);
         }
-        $kegiatan = clean_text($kegiatan, 500);
+        $kegSave = $kegiatanClean !== '' ? $kegiatanClean : (string) ($existing['kegiatan'] ?? '');
+        $kodeLokasi = $modeEfektif === 'wfh' ? '' : clean_text($barcode, 100);
         $upd = $pdo->prepare('UPDATE absensi SET jam_pulang = ?, foto_pulang = ?, barcode_pulang = ?, lat_pulang = ?, lng_pulang = ?, akurasi_pulang = ?, jarak_pulang_m = ?, mode = ?, kegiatan = ?, diperbarui_pada = ? WHERE id = ?');
-        $upd->execute([$now, $fotoName, clean_text($barcode, 100), $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatan, date('Y-m-d H:i:s'), $existing['id']]);
-        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_out', "pulang {$now} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode}");
+        $upd->execute([$now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $modeEfektif, $kegSave, date('Y-m-d H:i:s'), $existing['id']]);
+        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_out', "pulang {$now} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$modeEfektif}");
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -207,7 +222,7 @@ function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, 
         throw $e;
     }
 
-    return ['jam_pulang' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode];
+    return ['jam_pulang' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $modeEfektif, 'kegiatan' => $kegSave];
 }
 
 function do_izin(array $user, string $jenis, string $mulai, string $sampai, string $catatan, ?string $foto, bool $autoApprove = false): array
@@ -219,6 +234,9 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
     }
     if (!$mulai || !$sampai) {
         json_error('Tanggal mulai dan selesai wajib diisi.', 422);
+    }
+    if (!valid_iso_date($mulai) || !valid_iso_date($sampai)) {
+        json_error('Format tanggal mulai/selesai tidak valid.', 422);
     }
     if (strtotime($sampai) < strtotime($mulai)) {
         json_error('Tanggal selesai tidak boleh sebelum tanggal mulai.', 422);
@@ -255,6 +273,9 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
         }
         $cursor = strtotime('+1 day', $cursor);
     }
+    if ($count === 0) {
+        json_error('Tidak ada hari kerja aktif pada rentang tanggal yang dipilih.', 422);
+    }
     write_audit((int) $user['id'], (int) $user['organisasi_id'], 'ajukan_' . $jenis, "{$mulai}..{$sampai} ({$count} hari)");
 
     return ['hari' => $count, 'jenis' => $jenis];
@@ -265,6 +286,15 @@ function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $stat
     $catatan = clean_text($catatan, 500);
     if ($catatan === '') {
         json_error('Alasan koreksi wajib diisi.', 422);
+    }
+    if (!valid_iso_date($tanggal)) {
+        json_error('Format tanggal tidak valid.', 422);
+    }
+    if ($jamMasuk !== null && $jamMasuk !== '' && !valid_time_hm($jamMasuk)) {
+        json_error('Format jam masuk tidak valid.', 422);
+    }
+    if ($jamPulang !== null && $jamPulang !== '' && !valid_time_hm($jamPulang)) {
+        json_error('Format jam pulang tidak valid.', 422);
     }
     if (!in_array($status, status_options(), true)) {
         json_error('Status tidak valid.', 422);
@@ -301,18 +331,14 @@ function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $stat
 
 function jadwal_shift_row(array $r, string $defaultMasuk = '08:00'): string
 {
-    $teks = (string) ($r['catatan'] ?? '') . ' ' . (string) ($r['kegiatan'] ?? '');
-    if (stripos($teks, 'Pagi') !== false) {
-        return '06:00';
-    }
-    if (stripos($teks, 'Siang') !== false) {
-        return '14:00';
-    }
-    if (stripos($teks, 'Malam') !== false) {
-        return '22:00';
-    }
-    if (stripos($teks, 'Middle') !== false) {
-        return '10:00';
+    $catatan = (string) ($r['catatan'] ?? '');
+    if (preg_match('/Shift:\s*(Pagi|Siang|Malam|Middle)/i', $catatan, $m)) {
+        return [
+            'pagi' => '06:00',
+            'siang' => '14:00',
+            'malam' => '22:00',
+            'middle' => '10:00',
+        ][strtolower($m[1])] ?? $defaultMasuk;
     }
     return $defaultMasuk;
 }
@@ -329,12 +355,7 @@ function hitung_terlambat_row(array $r, string $defaultJamMasuk, int $toleransi)
         $masukTs += 86400;
     }
     $late = (int) round(($masukTs - $jadwalTs) / 60);
-    $netLate = max(0, $late - $toleransi);
-    // Bila form diisi di pertengahan/akhir shift (> 3 jam setelah jadwal), normalisasi agar tidak mendistorsi rata-rata
-    if ($netLate > 180) {
-        $netLate = min(60, $netLate % 60);
-    }
-    return $netLate;
+    return max(0, $late - $toleransi);
 }
 
 function hitung_durasi_row(?string $jamMasuk, ?string $jamPulang): ?int
@@ -500,7 +521,7 @@ function org_toleransi(int $orgId): int
 function dashboard_summary(int $orgId): array
 {
     $today = date('Y-m-d');
-    $counts = ['hadir' => 0, 'terlambat' => 0, 'izin' => 0, 'sakit' => 0, 'alpa' => 0, 'belum' => 0];
+    $counts = ['hadir' => 0, 'terlambat' => 0, 'izin' => 0, 'sakit' => 0, 'alpa' => 0, 'belum' => 0, 'wfo' => 0, 'wfh' => 0];
 
     $stmt = db()->prepare('SELECT COUNT(*) FROM pengguna WHERE organisasi_id = ? AND peran = ? AND aktif = 1');
     $stmt->execute([$orgId, 'karyawan']);
@@ -517,6 +538,16 @@ function dashboard_summary(int $orgId): array
     }
     $counts['belum'] = max(0, $total - $hadirSet - $counts['izin'] - $counts['sakit'] - $counts['alpa']);
     $counts['total_karyawan'] = $total;
+
+    $stmt = db()->prepare("SELECT a.mode, COUNT(*) c FROM absensi a JOIN pengguna u ON u.id = a.pengguna_id WHERE u.organisasi_id = ? AND a.tanggal = ? AND a.status IN ('hadir', 'terlambat') GROUP BY a.mode");
+    $stmt->execute([$orgId, $today]);
+    foreach ($stmt->fetchAll() as $row) {
+        if (($row['mode'] ?? '') === 'wfh') {
+            $counts['wfh'] += (int) $row['c'];
+        } else {
+            $counts['wfo'] += (int) $row['c'];
+        }
+    }
 
     // Tren 30 hari
     $start = date('Y-m-d', strtotime('-29 days'));

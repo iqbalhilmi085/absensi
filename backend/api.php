@@ -92,7 +92,8 @@ function route(string $action, string $method): void
                 param('lng'),
                 param('akurasi'),
                 param('mode') ? (string) param('mode') : null,
-                (bool) param('palsu', false)
+                (bool) param('palsu', false),
+                param('kegiatan') ? (string) param('kegiatan') : null
             );
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Absen masuk berhasil']);
 
@@ -430,7 +431,7 @@ function own_today(array $user): array
 
 function daftar_harian(int $orgId, string $tanggal): array
 {
-    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.catatan, a.kegiatan, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
+    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.mode, a.catatan, a.kegiatan, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
         FROM pengguna u
         LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ?
         WHERE u.organisasi_id = ? AND u.peran = 'karyawan' AND u.aktif = 1
@@ -558,13 +559,17 @@ function axel_dataset(array $user): array
     if ($status !== null && !in_array($status, status_options(), true)) {
         $status = null;
     }
+    $mode = param('mode') ?: null;
+    if ($mode !== null && !in_array($mode, ['wfo', 'wfh'], true)) {
+        $mode = null;
+    }
 
     if (strtotime($sampai) < strtotime($dari)) {
         json_error('Tanggal selesai tidak boleh sebelum tanggal mulai.', 422);
     }
 
     $sql = "SELECT a.id, a.pengguna_id, a.tanggal, u.nama, u.tim, u.jabatan, a.status, a.jam_masuk, a.jam_pulang,
-                   a.foto_masuk, a.foto_pulang, a.barcode_masuk, a.catatan, a.kegiatan,
+                   a.foto_masuk, a.foto_pulang, a.barcode_masuk, a.mode, a.catatan, a.kegiatan,
                    k.nama AS dikoreksi_nama
             FROM absensi a
             JOIN pengguna u ON u.id = a.pengguna_id
@@ -582,6 +587,10 @@ function axel_dataset(array $user): array
     if ($status) {
         $sql .= ' AND a.status = ?';
         $params[] = $status;
+    }
+    if ($mode) {
+        $sql .= ' AND a.mode = ?';
+        $params[] = $mode;
     }
     $sql .= ' ORDER BY a.tanggal DESC, u.nama ASC';
 
@@ -624,6 +633,7 @@ function axel_dataset(array $user): array
             'karyawan' => $karyawan,
             'tim' => $tim,
             'status' => $status,
+            'mode' => $mode,
         ],
         'organisasi' => ['nama' => $org['nama'], 'industri' => $org['industri']],
     ];
