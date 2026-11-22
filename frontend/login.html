@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Masuk · Aplikasi Absensi Karyawan</title>
+<title>Masuk · Portal Absensi Perkantoran</title>
 <script>
   document.documentElement.dataset.theme =
     localStorage.getItem('absensi-theme') || 'light';
@@ -13,72 +13,108 @@
 <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body class="auth-body">
-<main class="auth-wrap">
-  <div class="glass auth-card">
-    <div class="brand">
-      <span class="brand-dot">AU</span>
-      <div>
-        <h1>Aplikasi Absensi</h1>
-        <p class="muted small">Kelola kehadiran karyawan dengan mudah</p>
+<div class="auth-shell">
+  <section class="auth-hero" aria-label="Informasi Portal">
+    <div class="auth-hero-inner">
+      <div class="auth-hero-badge">
+        <svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+        <span>Sistem Kehadiran Perkantoran</span>
+      </div>
+      <h2>Kelola kehadiran kantor &amp; WFH dalam satu portal yang rapi.</h2>
+      <p>Karyawan, atasan, dan admin HR masuk menggunakan akun masing-masing untuk mencatat kehadiran harian, aktivitas kerja, serta laporan bulanan.</p>
+      <div class="auth-features">
+        <div class="auth-feature">
+          <div class="auth-feature-ico">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>
+          </div>
+          <div>
+            <strong>Presensi Di Kantor (WFO)</strong>
+            <span>Validasi kode QR lokasi kantor, foto kehadiran, dan radius GPS secara akurat.</span>
+          </div>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-ico">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </div>
+          <div>
+            <strong>Presensi WFH + Catatan Kegiatan</strong>
+            <span>Karyawan WFH tetap dapat absen dengan melampirkan rencana dan ringkasan kegiatan harian.</span>
+          </div>
+        </div>
+        <div class="auth-feature">
+          <div class="auth-feature-ico">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+          </div>
+          <div>
+            <strong>Rekap &amp; Penilaian Disiplin HR</strong>
+            <span>Pantau kehadiran harian, ekspor laporan Excel/PDF, dan evaluasi kedisiplinan tim.</span>
+          </div>
+        </div>
       </div>
     </div>
+    <div class="auth-hero-foot">
+      Portal Absensi Korporat · Akses Terproteksi Per Akun
+    </div>
+  </section>
 
-    <div id="alert" class="alert alert-error" role="alert" hidden></div>
-    <div id="alert-ok" class="alert alert-ok" role="status" hidden></div>
+  <main class="auth-panel">
+    <div class="glass auth-card">
+      <div class="brand">
+        <span class="brand-dot" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M9 14l2 2 4-4"/></svg>
+        </span>
+        <div class="auth-card-head">
+          <h1>Masuk ke Akun Anda</h1>
+          <p>Gunakan email kantor untuk Karyawan, Atasan, maupun Admin</p>
+        </div>
+      </div>
 
-    <form id="login-form" class="form">
-      <label class="field">
-        <span>Email Admin</span>
-        <input type="email" name="email" autocomplete="username" required placeholder="Contoh: admin@demo.test">
-      </label>
-      <label class="field">
-        <span>Kata Sandi</span>
-        <input type="password" name="kata_sandi" autocomplete="current-password" required placeholder="Masukkan kata sandi">
-      </label>
-      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Masuk sebagai Admin</button>
-    </form>
+      <div id="alert" class="alert alert-error" role="alert" hidden></div>
 
-    <div class="auth-divider">atau</div>
+      <form id="login-form" class="form">
+        <label class="field">
+          <span>Email Kantor</span>
+          <input type="email" name="email" autocomplete="username" required placeholder="nama@perusahaan.com">
+        </label>
+        <label class="field">
+          <span>Kata Sandi</span>
+          <div class="pass-wrap">
+            <input type="password" name="kata_sandi" id="login-pass" autocomplete="current-password" required placeholder="Masukkan kata sandi">
+            <button type="button" class="pass-toggle" id="toggle-pass" aria-label="Tampilkan kata sandi" title="Tampilkan atau sembunyikan kata sandi">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </label>
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">Masuk ke Portal</button>
+      </form>
 
-    <button type="button" class="btn btn-secondary btn-block" id="kiosk-open-btn">
-      Absen Karyawan (Tanpa Login)
-    </button>
+      <div class="auth-foot-note">
+        Belum punya akses atau lupa kata sandi? Hubungi Admin HR kantor Anda.
+      </div>
+    </div>
+  </main>
+</div>
 
-    <p class="muted small" style="text-align:center">
-      Karyawan dapat langsung klik tombol di atas untuk absen masuk atau pulang.
-    </p>
-  </div>
-</main>
-
-<div id="modal-root"></div>
-
-<script src="assets/vendor/jsQR.js"></script>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/scanner.js"></script>
 <script>
   const form = document.getElementById('login-form');
   const alertBox = document.getElementById('alert');
-  const alertOk = document.getElementById('alert-ok');
   const btn = document.getElementById('login-btn');
+  const passInput = document.getElementById('login-pass');
+  const togglePass = document.getElementById('toggle-pass');
 
-  function showError(msg) {
-    alertOk.hidden = true;
-    alertBox.textContent = msg;
-    alertBox.hidden = false;
-  }
-
-  function showOk(msg) {
-    alertBox.hidden = true;
-    alertOk.textContent = msg;
-    alertOk.hidden = false;
-  }
+  togglePass.addEventListener('click', () => {
+    const show = passInput.type === 'password';
+    passInput.type = show ? 'text' : 'password';
+    togglePass.setAttribute('aria-label', show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi');
+  });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     alertBox.hidden = true;
     btn.disabled = true;
-    btn.textContent = 'Sedang masuk…';
+    btn.textContent = 'Memverifikasi…';
     try {
       await Api.post('auth.login', {
         email: form.email.value,
@@ -86,105 +122,10 @@
       });
       location.href = 'index.html';
     } catch (err) {
-      showError(err.message || 'Gagal masuk. Periksa kembali email dan kata sandi.');
+      alertBox.textContent = err.message || 'Gagal masuk. Periksa kembali email dan kata sandi.';
+      alertBox.hidden = false;
       btn.disabled = false;
-      btn.textContent = 'Masuk sebagai Admin';
-    }
-  });
-
-  document.getElementById('kiosk-open-btn').addEventListener('click', async () => {
-    try {
-      const { data } = await Api.get('kiosk.info');
-      const root = document.getElementById('modal-root');
-      const overlay = document.createElement('div');
-      overlay.className = 'overlay';
-      const empOpts = data.karyawan.map((k) => {
-        const st = k.jam_masuk ? (k.jam_pulang ? ' (Sudah Pulang)' : ` (Sudah Masuk ${k.jam_masuk.slice(0,5)})`) : '';
-        return `<option value="${k.id}">${k.nama} — ${k.tim}${st}</option>`;
-      }).join('');
-
-      overlay.innerHTML = `
-        <div class="glass modal">
-          <div class="modal-head">
-            <h2>Form Absen Karyawan · ${data.organisasi.nama}</h2>
-            <button class="icon-btn" type="button" data-close>×</button>
-          </div>
-          <div class="form">
-            <label class="field">
-              <span>Pilih Nama Anda</span>
-              <select id="kiosk-emp">${empOpts}</select>
-            </label>
-            <div class="field-row">
-              <label class="field">
-                <span>Mau Absen Apa?</span>
-                <select id="kiosk-tipe">
-                  <option value="masuk">Absen Masuk</option>
-                  <option value="pulang">Absen Pulang</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>Pilih Shift Kerja</span>
-                <select id="kiosk-shift">
-                  <option value="Pagi (06:00-14:00)">Shift Pagi (06:00 - 14:00)</option>
-                  <option value="Middle">Shift Middle (10:00 - 18:00)</option>
-                  <option value="Siang (14:00 - 22:00)">Shift Siang (14:00 - 22:00)</option>
-                  <option value="Malam (22:00 - 06:00)">Shift Malam (22:00 - 06:00)</option>
-                </select>
-              </label>
-            </div>
-            <div id="kiosk-err" class="alert alert-error" hidden></div>
-            <button type="button" class="btn btn-primary btn-block" id="kiosk-next">
-              Lanjut Ambil Foto &amp; Absen
-            </button>
-          </div>
-        </div>`;
-      root.append(overlay);
-      const close = () => overlay.remove();
-      overlay.querySelector('[data-close]').addEventListener('click', close);
-
-      overlay.querySelector('#kiosk-next').addEventListener('click', async () => {
-        const penggunaId = Number(overlay.querySelector('#kiosk-emp').value);
-        const tipe = overlay.querySelector('#kiosk-tipe').value;
-        const shift = overlay.querySelector('#kiosk-shift').value;
-        const errEl = overlay.querySelector('#kiosk-err');
-        errEl.hidden = true;
-        try {
-          const org = data.organisasi;
-          const shot = await Scanner.open({
-            wajibBarcode: org.wajib_barcode,
-            wajibFoto: org.wajib_foto,
-            wajibGps: org.wajib_gps,
-            radius: org.radius_masuk_m,
-            latKantor: org.lat_kantor,
-            lngKantor: org.lng_kantor,
-            kodeLokasi: org.kode_lokasi,
-            title: tipe === 'masuk' ? 'Absen Masuk' : 'Absen Pulang'
-          });
-          const payload = {
-            pengguna_id: penggunaId,
-            tipe,
-            shift,
-            barcode: shot.barcode,
-            foto: shot.foto,
-            palsu: !!shot.palsu
-          };
-          if (shot.gps) {
-            payload.lat = shot.gps.lat;
-            payload.lng = shot.gps.lng;
-            payload.akurasi = shot.gps.akurasi;
-          }
-          const res = await Api.post('kiosk.absen', payload);
-          close();
-          showOk(res.pesan || 'Absen berhasil disimpan.');
-        } catch (err) {
-          if (err.message !== 'dibatalkan') {
-            errEl.textContent = err.message;
-            errEl.hidden = false;
-          }
-        }
-      });
-    } catch (err) {
-      showError(err.message || 'Gagal membuka form absen.');
+      btn.textContent = 'Masuk ke Portal';
     }
   });
 </script>
