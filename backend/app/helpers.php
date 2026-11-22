@@ -4,10 +4,29 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
+function send_security_headers(bool $isMedia = false): void
+{
+    if (headers_sent()) {
+        return;
+    }
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: geolocation=(self), camera=(self)');
+    if ($isMedia) {
+        header("Content-Security-Policy: default-src 'none'");
+    }
+}
+
 function start_session(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
-        session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax']);
+        $isHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        session_set_cookie_params([
+            'httponly' => true,
+            'samesite' => 'Lax',
+            'secure' => $isHttps,
+        ]);
         session_start();
     }
 }
@@ -15,6 +34,7 @@ function start_session(): void
 function json_response($data, int $status = 200): void
 {
     http_response_code($status);
+    send_security_headers();
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;

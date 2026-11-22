@@ -13,8 +13,9 @@ if ($action === 'kiosk.info' || $action === 'kiosk.absen') {
 
 if ($method === 'POST') {
     verify_csrf();
-    // Pembatasan laju umum untuk aksi tulis, terpisah dari penguncian login.
-    rate_limit('api:' . $action, RATE_LIMIT_PER_MENIT, 60);
+    // Pembatasan laju umum untuk aksi tulis (lebih ketat untuk login).
+    $limitMax = $action === 'auth.login' ? 15 : RATE_LIMIT_PER_MENIT;
+    rate_limit('api:' . $action, $limitMax, 60);
 }
 
 try {
@@ -22,7 +23,8 @@ try {
 } catch (RuntimeException $e) {
     json_error($e->getMessage(), 422);
 } catch (Throwable $e) {
-    json_error('Terjadi kesalahan pada server: ' . $e->getMessage(), 500);
+    error_log('[Absensi API] ' . $e->getMessage());
+    json_error('Terjadi kesalahan internal pada server.', 500);
 }
 
 function route(string $action, string $method): void
@@ -209,12 +211,24 @@ function route(string $action, string $method): void
         case 'klaster.save':
             $user = require_role(['admin', 'atasan']);
             $payload = input_json();
+            $kVal = (int) param('k', 3);
+            if ($kVal < 2 || $kVal > 10) {
+                json_error('Jumlah kategori K-Means harus antara 2 sampai 10.', 422);
+            }
+            $hasilVal = $payload['hasil'] ?? [];
+            if (!is_array($hasilVal)) {
+                json_error('Format hasil klaster tidak valid.', 422);
+            }
+            $hasilJson = json_encode($hasilVal, JSON_UNESCAPED_UNICODE);
+            if ($hasilJson === false || strlen($hasilJson) > 200000) {
+                json_error('Ukuran hasil klaster melebihi batas.', 422);
+            }
             $stmt = db()->prepare('INSERT INTO hasil_klaster (organisasi_id, periode, k, hasil, dibuat_pada) VALUES (?, ?, ?, ?, ?)');
             $stmt->execute([
                 (int) $user['organisasi_id'],
-                (string) param('periode', date('Y-m')),
-                (int) param('k', 3),
-                json_encode($payload['hasil'] ?? [], JSON_UNESCAPED_UNICODE),
+                clean_text((string) param('periode', date('Y-m')), 60),
+                $kVal,
+                $hasilJson,
                 date('Y-m-d H:i:s'),
             ]);
             write_audit((int) $user['id'], (int) $user['organisasi_id'], 'klaster_save', 'menyimpan hasil K-Means');
@@ -266,8 +280,8 @@ function update_org(array $user): void
     }
     $jamMasuk = (string) param('jam_masuk', $preset[$industri]['jam_masuk']);
     $jamPulang = (string) param('jam_pulang', $preset[$industri]['jam_pulang']);
-    if (!preg_match('/^\d{2}:\d{2}$/', $jamMasuk) || !preg_match('/^\d{2}:\d{2}$/', $jamPulang)) {
-        json_error('Format jam tidak valid (gunakan HH:MM).', 422);
+    if (!valid_time_hm($jamMasuk) || !valid_time_hm($jamPulang)) {
+        json_error('Format jam tidak valid (gunakan HH:MM yang sah).', 422);
     }
     $toleransi = max(0, min(180, (int) param('toleransi_menit', $preset[$industri]['toleransi_menit'])));
     $hari = param('hari_kerja', []);
@@ -369,6 +383,7 @@ function save_karyawan(array $actor, array $data): int
     }
 
     $now = date('Y-m-d H:i:s');
+    $minPassLen = $peran === 'admin' ? MIN_ADMIN_PASSWORD : 6;
     if ($id > 0) {
         $chk = db()->prepare('SELECT id FROM pengguna WHERE id = ? AND organisasi_id = ?');
         $chk->execute([$id, $actor['organisasi_id']]);
@@ -376,8 +391,8 @@ function save_karyawan(array $actor, array $data): int
             json_error('Karyawan tidak ditemukan.', 404);
         }
         if ($password !== '') {
-            if (strlen($password) < 6) {
-                json_error('Kata sandi minimal 6 karakter.', 422);
+            if (strlen($password) < $minPassLen) {
+                json_error("Kata sandi minimal {$minPassLen} karakter.", 422);
             }
             $stmt = db()->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=?, kata_sandi=? WHERE id=? AND organisasi_id=?');
             $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, password_hash($password, PASSWORD_DEFAULT), $id, $actor['organisasi_id']]);
@@ -389,8 +404,8 @@ function save_karyawan(array $actor, array $data): int
         return $id;
     }
 
-    if (strlen($password) < 6) {
-        json_error('Kata sandi minimal 6 karakter.', 422);
+    if (strlen($password) < $minPassLen) {
+        json_error("Kata sandi minimal {$minPassLen} karakter.", 422);
     }
     $stmt = db()->prepare('INSERT INTO pengguna (organisasi_id, nama, email, kata_sandi, peran, tim, jabatan, aktif, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([$actor['organisasi_id'], $nama, $email, password_hash($password, PASSWORD_DEFAULT), $peran, $tim, $jabatan, $aktif, $now]);

@@ -1,0 +1,14 @@
+# Proteksi root aplikasi Absensi
+Options -Indexes
+DirectoryIndex frontend/login.html
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^$ frontend/login.html [L,R=302]
+    RewriteRule ^(\.git|\.agents|\.superpowers|docs|tests)(/|$) - [F,L]
+    RewriteRule ^router\.php$ - [F,L]
+</IfModule>
+
+<FilesMatch "(^\.|composer\.json|package\.json|package-lock\.json|skills-lock\.json|\.(sqlite|sqlite3|db|sql|md|log|ini|lock))$">
+    Require all denied
+</FilesMatch>

@@ -35,6 +35,7 @@ if (!is_file($path)) {
 
 $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
 $mimes = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
+send_security_headers(true);
 header('Content-Type: ' . $mimes[$ext]);
 header('Content-Length: ' . filesize($path));
 header('Cache-Control: private, max-age=86400');

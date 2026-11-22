@@ -47,8 +47,9 @@
   }
 
   function badge(status) {
-    const s = status || 'alpa';
-    return `<span class="badge badge-${s}">${STATUS_LABEL[s] || s}</span>`;
+    const s = String(status || 'alpa');
+    const safeClass = esc(s.replace(/[^a-z0-9_-]/gi, ''));
+    return `<span class="badge badge-${safeClass}">${esc(STATUS_LABEL[s] || s)}</span>`;
   }
 
   function modeBadge(mode) {

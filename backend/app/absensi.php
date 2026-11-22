@@ -258,24 +258,30 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
 
     $cursor = strtotime($mulai);
     $end = strtotime($sampai);
-    $count = 0;
+    $dates = [];
     while ($cursor <= $end) {
         $date = date('Y-m-d', $cursor);
         if (is_hari_kerja($org, $date)) {
             $find->execute([$user['id'], $date]);
             $row = $find->fetch();
-            if ($row) {
-                $update->execute([$jenis, $catatan, $fotoName, $ts, $row['id']]);
-            } else {
-                $insert->execute([$user['id'], $date, $jenis, $catatan, $fotoName, $ts, $ts]);
+            if (!$autoApprove && $row && (!empty($row['dikoreksi_oleh']) || !empty($row['jam_masuk']))) {
+                json_error("Tanggal {$date} sudah tercatat hadir atau dikoreksi HR. Hubungi admin untuk perubahan.", 422);
             }
-            $count++;
+            $dates[] = [$date, $row];
         }
         $cursor = strtotime('+1 day', $cursor);
     }
-    if ($count === 0) {
+    if (!$dates) {
         json_error('Tidak ada hari kerja aktif pada rentang tanggal yang dipilih.', 422);
     }
+    foreach ($dates as [$date, $row]) {
+        if ($row) {
+            $update->execute([$jenis, $catatan, $fotoName, $ts, $row['id']]);
+        } else {
+            $insert->execute([$user['id'], $date, $jenis, $catatan, $fotoName, $ts, $ts]);
+        }
+    }
+    $count = count($dates);
     write_audit((int) $user['id'], (int) $user['organisasi_id'], 'ajukan_' . $jenis, "{$mulai}..{$sampai} ({$count} hari)");
 
     return ['hari' => $count, 'jenis' => $jenis];
