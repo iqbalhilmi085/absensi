@@ -21,8 +21,8 @@ function current_user(): ?array
 }
 
 /**
- * Semua halaman admin dan endpoint API hanya boleh diakses admin yang login.
- * Tanpa login -> 401 (API) / redirect ke login (halaman). Bukan admin -> 403.
+ * Semua halaman dan endpoint API memerlukan sesi login yang valid.
+ * Tanpa login -> 401 (API) / redirect ke login (halaman). Peran tidak dikenal -> 403.
  */
 function require_login(): array
 {
@@ -34,12 +34,12 @@ function require_login(): array
         header('Location: ../frontend/login.html');
         exit;
     }
-    if (($user['peran'] ?? '') !== 'admin') {
+    if (!in_array($user['peran'] ?? '', peran_options(), true)) {
         if (is_api_request()) {
-            json_error('Hanya admin yang boleh mengakses aplikasi ini.', 403);
+            json_error('Peran akun tidak valid.', 403);
         }
         http_response_code(403);
-        exit('Akses ditolak. Hanya admin yang dapat membuka halaman ini.');
+        exit('Akses ditolak. Peran akun tidak valid.');
     }
     return $user;
 }
@@ -106,7 +106,7 @@ function clear_login_attempts(string $email, string $ip): void
 }
 
 /**
- * Proses login. Hanya pengguna berperan admin yang boleh berhasil.
+ * Proses login untuk seluruh peran valid yang aktif (karyawan, atasan, admin).
  * Mengembalikan array: ['ok' => bool, 'error' => string, 'status' => int, 'user' => ?array]
  */
 function login(string $email, string $password): array
@@ -140,10 +140,10 @@ function login(string $email, string $password): array
         return ['ok' => false, 'status' => 403, 'error' => 'Akun ini dinonaktifkan. Hubungi admin.'];
     }
 
-    if (($user['peran'] ?? '') !== 'admin') {
+    if (!in_array($user['peran'] ?? '', peran_options(), true)) {
         record_login_attempt($email, $ip, false);
-        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'login_ditolak', "bukan_admin email={$email}");
-        return ['ok' => false, 'status' => 403, 'error' => 'Akun ini bukan admin. Karyawan dan atasan tidak dapat masuk.'];
+        write_audit((int) $user['id'], (int) $user['organisasi_id'], 'login_ditolak', "peran_invalid email={$email}");
+        return ['ok' => false, 'status' => 403, 'error' => 'Peran akun tidak dikenali. Hubungi admin.'];
     }
 
     clear_login_attempts($email, $ip);

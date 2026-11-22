@@ -11,11 +11,17 @@ if (!preg_match('/^[A-Za-z0-9_]+\.(jpg|jpeg|png|webp)$/', $file)) {
     exit('Nama berkas tidak valid.');
 }
 
-// Pastikan foto memang milik organisasi pengguna.
-$stmt = db()->prepare("SELECT COUNT(*) FROM absensi a
+// Pastikan foto memang milik organisasi pengguna (untuk karyawan, hanya milik sendiri).
+$sql = "SELECT COUNT(*) FROM absensi a
     JOIN pengguna u ON u.id = a.pengguna_id
-    WHERE u.organisasi_id = ? AND (a.foto_masuk = ? OR a.foto_pulang = ?)");
-$stmt->execute([$user['organisasi_id'], $file, $file]);
+    WHERE u.organisasi_id = ? AND (a.foto_masuk = ? OR a.foto_pulang = ?)";
+$params = [$user['organisasi_id'], $file, $file];
+if (($user['peran'] ?? '') === 'karyawan') {
+    $sql .= ' AND a.pengguna_id = ?';
+    $params[] = $user['id'];
+}
+$stmt = db()->prepare($sql);
+$stmt->execute($params);
 if ((int) $stmt->fetchColumn() === 0) {
     http_response_code(404);
     exit('Foto tidak ditemukan.');

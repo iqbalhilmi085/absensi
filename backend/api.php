@@ -60,11 +60,11 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'organisasi' => get_org((int) $user['organisasi_id'])]);
 
         case 'karyawan.list':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             json_response(['ok' => true, 'data' => list_karyawan((int) $user['organisasi_id'])]);
 
         case 'tim.list':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             json_response(['ok' => true, 'data' => list_tim((int) $user['organisasi_id'])]);
 
         case 'karyawan.save':
@@ -138,18 +138,15 @@ function route(string $action, string $method): void
 
         case 'absensi.izin_list':
             $user = require_role(['admin', 'atasan', 'karyawan']);
-            json_response(['ok' => true, 'data' => daftar_izin((int) $user['organisasi_id'])]);
+            $onlyUserId = $user['peran'] === 'karyawan' ? (int) $user['id'] : null;
+            json_response(['ok' => true, 'data' => daftar_izin((int) $user['organisasi_id'], $onlyUserId)]);
 
         case 'kiosk.info':
-            json_response(['ok' => true, 'data' => kiosk_info()]);
-
         case 'kiosk.absen':
-            rate_limit('absensi', RATE_LIMIT_ABSEN, 60, 'Terlalu banyak percobaan absen. Tunggu sebentar lalu coba lagi.');
-            $res = kiosk_absen();
-            json_response(['ok' => true, 'data' => $res, 'pesan' => $res['pesan']]);
+            json_error('Mode Kiosk sudah dinonaktifkan. Silakan login menggunakan akun masing-masing.', 410);
 
         case 'absensi.koreksi':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             $res = do_koreksi(
                 $user,
                 (int) param('pengguna_id', 0),
@@ -162,24 +159,40 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Catatan absensi diperbarui']);
 
         case 'absensi.harian':
-            $user = require_role(['admin']);
-            json_response(['ok' => true, 'data' => daftar_harian((int) $user['organisasi_id'], (string) param('tanggal', date('Y-m-d')))]);
+            $user = require_role(['admin', 'atasan']);
+            $tgl = (string) param('tanggal', date('Y-m-d'));
+            if (!valid_iso_date($tgl)) {
+                json_error('Format tanggal tidak valid.', 422);
+            }
+            json_response(['ok' => true, 'data' => daftar_harian((int) $user['organisasi_id'], $tgl)]);
 
         case 'rekap':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             $dari = (string) param('dari', date('Y-m-01'));
             $sampai = (string) param('sampai', date('Y-m-t'));
+            if (!valid_iso_date($dari) || !valid_iso_date($sampai)) {
+                json_error('Format tanggal tidak valid.', 422);
+            }
+            if (strtotime($sampai) < strtotime($dari)) {
+                json_error('Tanggal selesai tidak boleh sebelum tanggal mulai.', 422);
+            }
             $tim = param('tim') ?: null;
             json_response(['ok' => true, 'data' => rekap_data((int) $user['organisasi_id'], $dari, $sampai, $tim)]);
 
         case 'dashboard':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             json_response(['ok' => true, 'data' => dashboard_summary((int) $user['organisasi_id'])]);
 
         case 'kmeans.dataset':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             $dari = (string) param('dari', date('Y-m-01'));
             $sampai = (string) param('sampai', date('Y-m-t'));
+            if (!valid_iso_date($dari) || !valid_iso_date($sampai)) {
+                json_error('Format tanggal tidak valid.', 422);
+            }
+            if (strtotime($sampai) < strtotime($dari)) {
+                json_error('Tanggal selesai tidak boleh sebelum tanggal mulai.', 422);
+            }
             $tim = param('tim') ?: null;
             json_response([
                 'ok' => true,
@@ -189,7 +202,7 @@ function route(string $action, string $method): void
             ]);
 
         case 'klaster.save':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             $payload = input_json();
             $stmt = db()->prepare('INSERT INTO hasil_klaster (organisasi_id, periode, k, hasil, dibuat_pada) VALUES (?, ?, ?, ?, ?)');
             $stmt->execute([
@@ -203,7 +216,7 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'id' => (int) db()->lastInsertId()]);
 
         case 'klaster.list':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             $stmt = db()->prepare('SELECT id, periode, k, hasil, dibuat_pada FROM hasil_klaster WHERE organisasi_id = ? ORDER BY id DESC LIMIT 20');
             $stmt->execute([$user['organisasi_id']]);
             $rows = $stmt->fetchAll();
@@ -214,7 +227,7 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'data' => $rows]);
 
         case 'axel.dataset':
-            $user = require_role(['admin']);
+            $user = require_role(['admin', 'atasan']);
             json_response(axel_dataset($user));
 
         default:
@@ -269,15 +282,24 @@ function update_org(array $user): void
     // Konfigurasi GPS kantor & radius.
     $wajibGps = (int) (bool) param('wajib_gps', 0);
     $radius = max(0, min(100000, (int) param('radius_masuk_m', 0)));
-    $latRaw = param('lat_kantor', '');
-    $lngRaw = param('lng_kantor', '');
-    $latKantor = ($latRaw === '' || $latRaw === null) ? null : (float) $latRaw;
-    $lngKantor = ($lngRaw === '' || $lngRaw === null) ? null : (float) $lngRaw;
+    $latRaw = trim((string) param('lat_kantor', ''));
+    $lngRaw = trim((string) param('lng_kantor', ''));
+    if (($latRaw !== '' && !is_numeric($latRaw)) || ($lngRaw !== '' && !is_numeric($lngRaw))) {
+        json_error('Koordinat GPS kantor harus berupa angka yang valid.', 422);
+    }
+    if (($latRaw === '') !== ($lngRaw === '')) {
+        json_error('Lengkapi kedua koordinat (Latitude dan Longitude) kantor.', 422);
+    }
+    $latKantor = $latRaw === '' ? null : (float) $latRaw;
+    $lngKantor = $lngRaw === '' ? null : (float) $lngRaw;
     if ($latKantor !== null && ($latKantor < -90 || $latKantor > 90)) {
         json_error('Latitude kantor tidak valid.', 422);
     }
     if ($lngKantor !== null && ($lngKantor < -180 || $lngKantor > 180)) {
         json_error('Longitude kantor tidak valid.', 422);
+    }
+    if ($latKantor !== null && $lngKantor !== null && abs($latKantor) < 0.0000001 && abs($lngKantor) < 0.0000001) {
+        json_error('Koordinat kantor tidak boleh 0, 0. Gunakan tombol ambil lokasi otomatis.', 422);
     }
     if (($radius > 0 || $wajibGps) && ($latKantor === null || $lngKantor === null)) {
         json_error('Isi koordinat kantor terlebih dahulu sebelum mengaktifkan GPS/radius.', 422);
@@ -349,6 +371,9 @@ function save_karyawan(array $actor, array $data): int
             json_error('Karyawan tidak ditemukan.', 404);
         }
         if ($password !== '') {
+            if (strlen($password) < 6) {
+                json_error('Kata sandi minimal 6 karakter.', 422);
+            }
             $stmt = db()->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=?, kata_sandi=? WHERE id=? AND organisasi_id=?');
             $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, password_hash($password, PASSWORD_DEFAULT), $id, $actor['organisasi_id']]);
         } else {
@@ -414,15 +439,20 @@ function daftar_harian(int $orgId, string $tanggal): array
     return $stmt->fetchAll();
 }
 
-function daftar_izin(int $orgId): array
+function daftar_izin(int $orgId, ?int $onlyUserId = null): array
 {
-    $stmt = db()->prepare("SELECT a.id, a.pengguna_id, a.tanggal, a.status, a.catatan, a.foto_masuk, a.dibuat_pada, u.nama, u.tim, u.jabatan
+    $sql = "SELECT a.id, a.pengguna_id, a.tanggal, a.status, a.catatan, a.foto_masuk, a.dibuat_pada, u.nama, u.tim, u.jabatan
         FROM absensi a
         JOIN pengguna u ON u.id = a.pengguna_id
-        WHERE u.organisasi_id = ? AND a.status IN ('izin', 'sakit')
-        ORDER BY a.tanggal DESC, u.nama ASC
-        LIMIT 200");
-    $stmt->execute([$orgId]);
+        WHERE u.organisasi_id = ? AND a.status IN ('izin', 'sakit')";
+    $params = [$orgId];
+    if ($onlyUserId !== null) {
+        $sql .= ' AND a.pengguna_id = ?';
+        $params[] = $onlyUserId;
+    }
+    $sql .= ' ORDER BY a.tanggal DESC, u.nama ASC LIMIT 200';
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
     return $stmt->fetchAll();
 }
 
@@ -519,6 +549,9 @@ function axel_dataset(array $user): array
     $orgId = (int) $user['organisasi_id'];
     $dari = (string) param('dari', date('Y-m-01'));
     $sampai = (string) param('sampai', date('Y-m-t'));
+    if (!valid_iso_date($dari) || !valid_iso_date($sampai)) {
+        json_error('Format tanggal tidak valid.', 422);
+    }
     $karyawan = (int) param('karyawan', 0);
     $tim = param('tim') ?: null;
     $status = param('status') ?: null;
