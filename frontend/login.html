@@ -104,6 +104,15 @@
               <span class="badge badge-netral" id="qr-emp-badge">Belum Absen</span>
             </div>
 
+            <div id="qr-digital-card" class="qr-digital-mini" hidden>
+              <div class="qr-holder" id="qr-digital-svg" style="padding:8px"></div>
+              <div style="min-width:0">
+                <div style="font-weight:700;font-size:13px;color:var(--text)">Kartu QR Pribadi Anda</div>
+                <div class="small muted">Simpan atau screenshot QR ini untuk absen berikutnya.</div>
+                <div class="qr-code-pill" id="qr-digital-code" style="margin-top:6px">—</div>
+              </div>
+            </div>
+
             <div id="qr-done-box" class="alert alert-ok" hidden></div>
 
             <div id="qr-form-box" class="form">
@@ -190,6 +199,7 @@
   <div id="modal-root"></div>
 
   <script src="assets/vendor/jsQR.js"></script>
+  <script src="assets/vendor/qrcode.js"></script>
   <script src="assets/js/config.js"></script>
   <script src="assets/js/api.js"></script>
   <script src="assets/js/scanner.js"></script>
@@ -290,6 +300,17 @@
 
       byId('qr-emp-nama').textContent = k.nama;
       byId('qr-emp-meta').textContent = `${k.tim}${k.jabatan ? ' · ' + k.jabatan : ''}`;
+      const digiBox = byId('qr-digital-card');
+      if (digiBox && window.qrcode && activeQrCode) {
+        try {
+          const qr = qrcode(0, 'M');
+          qr.addData(activeQrCode);
+          qr.make();
+          byId('qr-digital-svg').innerHTML = qr.createSvgTag(3, 4);
+          byId('qr-digital-code').textContent = activeQrCode;
+          digiBox.hidden = false;
+        } catch (e) { digiBox.hidden = true; }
+      }
       const badgeEl = byId('qr-emp-badge');
       if (h.state === 'in') {
         badgeEl.className = 'badge badge-netral';
@@ -450,6 +471,13 @@
         submitBtn.disabled = false;
       }
     });
+
+    // Jika karyawan membuka link Kartu QR Pribadi yang dikirim Admin (?kartu=... atau ?qr=...)
+    const initQrParam = new URLSearchParams(location.search).get('kartu') || new URLSearchParams(location.search).get('qr') || '';
+    if (initQrParam.trim()) {
+      switchTab('qr');
+      lookupQr(initQrParam.trim());
+    }
   </script>
 </body>
 </html>

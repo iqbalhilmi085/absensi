@@ -18,10 +18,11 @@ $index = (string) file_get_contents(__DIR__ . '/../frontend/index.html');
 $css   = (string) file_get_contents(__DIR__ . '/../frontend/assets/css/app.css');
 $appJs = (string) file_get_contents(__DIR__ . '/../frontend/assets/js/app.js');
 
-// login.html checks (Ketik.com Editorial Portal: Personal QR Scan + Admin-Only Login)
+// login.html checks (Ketik.com Editorial Portal: Personal QR Scan + Digital QR Link + Admin-Only Login)
 check(str_contains($login, 'ketik-header') && str_contains($login, 'ketik-nav-strip'), 'login.html has Ketik.com editorial header & blue/teal nav bar');
 check(str_contains($login, 'ketik-logo.png') && str_contains($login, 'Ketik.com'), 'login.html displays Ketik.com logo and brand');
 check(str_contains($login, 'id="qr-scan-start"') && str_contains($login, 'id="qr-manual-code"'), 'login.html provides personal QR camera scan and manual QR input');
+check(str_contains($login, 'qr-digital-card') && str_contains($login, "get('kartu')"), 'login.html renders Digital Personal QR Card from ?kartu= link');
 check(str_contains($login, "Api.post('qr.lookup'") && str_contains($login, "Api.post('qr.absen'"), 'login.html uses qr.lookup and qr.absen endpoints');
 check(str_contains($login, 'id="login-form"') && str_contains($login, 'id="toggle-pass"'), 'login.html has admin login form with password toggle');
 check(str_contains($login, 'Masuk sebagai Admin') || str_contains($login, 'Login Admin'), 'login.html clearly labels admin-only login');
@@ -38,7 +39,7 @@ check(!str_contains($index, 'badge-hadir">Aktif'), 'index.html removes pulsing A
 check(!preg_match('/🌙|☀️|📍/u', $index), 'index.html contains no emoji icons');
 
 // app.css checks
-foreach (['.ketik-header', '.ketik-nav-strip', '.ketik-dash-hero', '.ketik-side-brand', '.metric-ico', '.seg-tabs', '.dash-bottom-grid', '.pass-wrap', '.mode-switch', '.badge-wfo', '.badge-wfh', '.nav-group-label', '.schedule-pill', '.qr-id-card'] as $sel) {
+foreach (['.ketik-header', '.ketik-nav-strip', '.ketik-dash-hero', '.ketik-side-brand', '.metric-ico', '.seg-tabs', '.sub-tabs', '.filter-grid', '.row-actions', '.qr-code-pill', '.qr-digital-mini', '.pass-wrap', '.mode-switch', '.badge-wfo', '.badge-wfh', '.nav-group-label', '.schedule-pill', '.qr-id-card'] as $sel) {
     check(str_contains($css, $sel), "app.css defines {$sel}");
 }
 check(str_contains(strtolower($css), '#0a88c9') && str_contains(strtolower($css), '#3abca5'), 'app.css applies Ketik.com #0A88C9 and #3ABCA5 brand colors');
@@ -49,6 +50,8 @@ check(is_file(__DIR__ . '/../frontend/assets/img/ketik-logo.png'), 'ketik-logo.p
 check(is_file(__DIR__ . '/../frontend/assets/img/ketik-icon.png'), 'ketik-icon.png asset exists locally');
 check(str_contains($appJs, 'ketik-divisi-list') && str_contains($appJs, 'Redaksi'), 'app.js provides Ketik.com media division suggestions');
 check(str_contains($appJs, 'openQrCard') && str_contains($appJs, 'karyawan.rotate_qr'), 'app.js provides Personal QR Card viewer/printer & QR rotation');
+check(str_contains($appJs, 'wa.me') && str_contains($appJs, 'mailto:') && str_contains($appJs, 'printAllQrCards'), 'app.js provides WhatsApp/Email sharing and batch print for Personal QR cards');
+check(str_contains($appJs, 'viewPantau') && str_contains($appJs, 'viewLaporan') && !str_contains($appJs, 'viewKmeans'), 'app.js streamlines admin menus and removes confusing K-Means view');
 check(!str_contains($appJs, "roles: ['karyawan']"), 'app.js scopes web dashboard strictly to admin role');
 
 exit($failures > 0 ? 1 : 0);
