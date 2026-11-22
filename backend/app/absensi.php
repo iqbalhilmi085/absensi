@@ -111,16 +111,45 @@ function resolve_gps(array $org, $latRaw, $lngRaw, $akurasiRaw, bool $palsu, str
     return ['lat' => $lat, 'lng' => $lng, 'akurasi' => $akurasi, 'jarak' => $jarak];
 }
 
-function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null): array
+function generate_personal_qr(PDO $pdo): string
+{
+    $chk = $pdo->prepare('SELECT id FROM karyawan WHERE kode_qr = ?');
+    do {
+        $code = 'KTK-' . strtoupper(bin2hex(random_bytes(8)));
+        $chk->execute([$code]);
+    } while ($chk->fetch());
+    return $code;
+}
+
+function resolve_personal_qr(string $kodeQr): ?array
+{
+    $clean = clean_text($kodeQr, 64);
+    if ($clean === '') {
+        return null;
+    }
+    $stmt = db()->prepare("SELECT u.*, k.id AS karyawan_id, k.kode_qr
+        FROM karyawan k
+        JOIN pengguna u ON u.id = k.legacy_pengguna_id
+        WHERE UPPER(k.kode_qr) = UPPER(?)
+          AND k.aktif = 1
+          AND u.aktif = 1
+          AND u.peran = 'karyawan'
+        LIMIT 1");
+    $stmt->execute([$clean]);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null, ?int $karyawanId = null, bool $bypassOfficeBarcode = false): array
 {
     $org = get_org((int) $user['organisasi_id']);
     $mode = in_array((string) $mode, mode_options(), true) ? (string) $mode : 'wfo';
     $kegiatanClean = clean_text($kegiatan, 500);
     $kegLen = function_exists('mb_strlen') ? mb_strlen($kegiatanClean, 'UTF-8') : strlen($kegiatanClean);
     if ($mode === 'wfh' && $kegLen < 3) {
-        json_error('Catatan kegiatan wajib diisi minimal 3 karakter untuk absen WFH.', 422);
+        json_error('Catatan kegiatan wajib diisi minimal 3 karakter untuk absen WFH / Liputan.', 422);
     }
-    if ($mode !== 'wfh' && !valid_barcode($org, $barcode)) {
+    if (!$bypassOfficeBarcode && $mode !== 'wfh' && !valid_barcode($org, $barcode)) {
         json_error('Barcode tidak dikenali. Pastikan Anda memindai barcode lokasi yang benar.', 422);
     }
     if ((int) $org['wajib_foto'] && empty($foto)) {
@@ -147,13 +176,13 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
         $now = date('H:i:s');
         $status = hitung_status_masuk($org, $now);
         $ts = date('Y-m-d H:i:s');
-        $kodeLokasi = $mode === 'wfh' ? '' : clean_text($barcode, 100);
+        $kodeLokasi = $mode === 'wfh' ? '' : clean_text($barcode ?: ($user['kode_qr'] ?? ''), 100);
         if ($existing) {
-            $upd = $pdo->prepare('UPDATE absensi SET status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, kegiatan = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
-            $upd->execute([$status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, '', $ts, $existing['id']]);
+            $upd = $pdo->prepare('UPDATE absensi SET karyawan_id = COALESCE(?, karyawan_id), status = ?, jam_masuk = ?, foto_masuk = ?, barcode_masuk = ?, lat_masuk = ?, lng_masuk = ?, akurasi_masuk = ?, jarak_masuk_m = ?, mode = ?, kegiatan = ?, catatan = ?, diperbarui_pada = ? WHERE id = ?');
+            $upd->execute([$karyawanId, $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, '', $ts, $existing['id']]);
         } else {
-            $ins = $pdo->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, kegiatan, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-            $ins->execute([$user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, $ts, $ts]);
+            $ins = $pdo->prepare('INSERT INTO absensi (karyawan_id, pengguna_id, tanggal, status, jam_masuk, foto_masuk, barcode_masuk, lat_masuk, lng_masuk, akurasi_masuk, jarak_masuk_m, mode, kegiatan, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $ins->execute([$karyawanId, $user['id'], date('Y-m-d'), $status, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $mode, $kegiatanClean, $ts, $ts]);
         }
         write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_in', "masuk {$now} status={$status} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$mode}");
         $pdo->commit();
@@ -167,7 +196,7 @@ function do_checkin(array $user, ?string $barcode, ?string $foto, $lat = null, $
     return ['status' => $status, 'jam_masuk' => $now, 'foto' => $fotoName, 'jarak' => $gps['jarak'], 'mode' => $mode, 'kegiatan' => $kegiatanClean];
 }
 
-function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null): array
+function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, $lng = null, $akurasi = null, ?string $mode = null, bool $palsu = false, ?string $kegiatan = null, ?int $karyawanId = null, bool $bypassOfficeBarcode = false): array
 {
     $org = get_org((int) $user['organisasi_id']);
     $existingPre = today_record((int) $user['id']);
@@ -177,9 +206,9 @@ function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, 
     $kegiatanClean = clean_text($kegiatan, 500);
     $kegLen = function_exists('mb_strlen') ? mb_strlen($kegiatanClean, 'UTF-8') : strlen($kegiatanClean);
     if ($modeEfektif === 'wfh' && $kegLen < 3) {
-        json_error('Ringkasan kegiatan wajib diisi minimal 3 karakter untuk absen pulang WFH.', 422);
+        json_error('Ringkasan kegiatan wajib diisi minimal 3 karakter untuk absen pulang WFH / Liputan.', 422);
     }
-    if ($modeEfektif !== 'wfh' && !valid_barcode($org, $barcode)) {
+    if (!$bypassOfficeBarcode && $modeEfektif !== 'wfh' && !valid_barcode($org, $barcode)) {
         json_error('Barcode tidak dikenali. Pastikan Anda memindai barcode lokasi yang benar.', 422);
     }
     if ((int) $org['wajib_foto'] && empty($foto)) {
@@ -210,9 +239,9 @@ function do_checkout(array $user, ?string $barcode, ?string $foto, $lat = null, 
             json_error('Jam pulang tidak boleh lebih awal dari jam masuk.', 422);
         }
         $kegSave = $kegiatanClean !== '' ? $kegiatanClean : (string) ($existing['kegiatan'] ?? '');
-        $kodeLokasi = $modeEfektif === 'wfh' ? '' : clean_text($barcode, 100);
-        $upd = $pdo->prepare('UPDATE absensi SET jam_pulang = ?, foto_pulang = ?, barcode_pulang = ?, lat_pulang = ?, lng_pulang = ?, akurasi_pulang = ?, jarak_pulang_m = ?, mode = ?, kegiatan = ?, diperbarui_pada = ? WHERE id = ?');
-        $upd->execute([$now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $modeEfektif, $kegSave, date('Y-m-d H:i:s'), $existing['id']]);
+        $kodeLokasi = $modeEfektif === 'wfh' ? '' : clean_text($barcode ?: ($user['kode_qr'] ?? ''), 100);
+        $upd = $pdo->prepare('UPDATE absensi SET karyawan_id = COALESCE(?, karyawan_id), jam_pulang = ?, foto_pulang = ?, barcode_pulang = ?, lat_pulang = ?, lng_pulang = ?, akurasi_pulang = ?, jarak_pulang_m = ?, mode = ?, kegiatan = ?, diperbarui_pada = ? WHERE id = ?');
+        $upd->execute([$karyawanId, $now, $fotoName, $kodeLokasi, $gps['lat'], $gps['lng'], $gps['akurasi'], $gps['jarak'], $modeEfektif, $kegSave, date('Y-m-d H:i:s'), $existing['id']]);
         write_audit((int) $user['id'], (int) $user['organisasi_id'], 'check_out', "pulang {$now} jarak=" . ($gps['jarak'] ?? '-') . "m mode={$modeEfektif}");
         $pdo->commit();
     } catch (Throwable $e) {

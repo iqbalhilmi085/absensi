@@ -27,6 +27,12 @@ try {
     json_error('Terjadi kesalahan internal pada server.', 500);
 }
 
+function param_str(string $key, string $default = ''): string
+{
+    $v = param($key, $default);
+    return is_scalar($v) ? (string) $v : $default;
+}
+
 function route(string $action, string $method): void
 {
     switch ($action) {
@@ -34,7 +40,7 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'csrf' => csrf_token()]);
 
         case 'auth.login':
-            $res = login((string) param('email', ''), (string) param('kata_sandi', ''));
+            $res = login(param_str('email'), param_str('kata_sandi'));
             if (!$res['ok']) {
                 json_error($res['error'], $res['status'] ?? 401);
             }
@@ -83,6 +89,104 @@ function route(string $action, string $method): void
             toggle_karyawan($user);
             json_response(['ok' => true]);
 
+        case 'karyawan.rotate_qr':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            $user = require_role(['admin']);
+            $newQr = rotate_karyawan_qr($user, (int) param('id', 0));
+            json_response(['ok' => true, 'kode_qr' => $newQr]);
+
+        case 'qr.lookup':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            rate_limit('qr_lookup', 20, 60, 'Terlalu banyak percobaan scan QR. Tunggu sebentar.');
+            $found = resolve_personal_qr(param_str('kode_qr'));
+            if (!$found) {
+                json_error('Kode QR karyawan tidak dikenali atau sudah tidak aktif.', 404);
+            }
+            $rec = today_record((int) $found['id']);
+            $org = get_org((int) $found['organisasi_id']);
+            $stateToday = (!$rec || !$rec['jam_masuk']) ? 'in' : (!$rec['jam_pulang'] ? 'out' : 'done');
+            json_response([
+                'ok' => true,
+                'data' => [
+                    'karyawan' => [
+                        'nama' => $found['nama'],
+                        'tim' => $found['tim'],
+                        'jabatan' => $found['jabatan'],
+                    ],
+                    'hari_ini' => [
+                        'state' => $stateToday,
+                        'jam_masuk' => $rec['jam_masuk'] ?? null,
+                        'jam_pulang' => $rec['jam_pulang'] ?? null,
+                        'mode' => $rec['mode'] ?? null,
+                        'kegiatan' => $rec['kegiatan'] ?? '',
+                        'status' => $rec['status'] ?? null,
+                    ],
+                    'aturan' => [
+                        'nama' => $org['nama'] ?? APP_NAME,
+                        'jam_masuk' => $org['jam_masuk'] ?? '08:00',
+                        'jam_pulang' => $org['jam_pulang'] ?? '17:00',
+                        'toleransi_menit' => (int) ($org['toleransi_menit'] ?? 15),
+                        'wajib_foto' => (bool) ($org['wajib_foto'] ?? 1),
+                        'wajib_gps' => (int) ($org['wajib_gps'] ?? 0) === 1,
+                        'radius_masuk_m' => (int) ($org['radius_masuk_m'] ?? 0),
+                        'lat_kantor' => isset($org['lat_kantor']) && $org['lat_kantor'] !== null ? (float) $org['lat_kantor'] : null,
+                        'lng_kantor' => isset($org['lng_kantor']) && $org['lng_kantor'] !== null ? (float) $org['lng_kantor'] : null,
+                    ],
+                ],
+            ]);
+
+        case 'qr.absen':
+            if ($method !== 'POST') {
+                json_error('Gunakan metode POST.', 405);
+            }
+            rate_limit('absensi', RATE_LIMIT_ABSEN, 60, 'Terlalu banyak percobaan absen. Tunggu sebentar lalu coba lagi.');
+            $found = resolve_personal_qr(param_str('kode_qr'));
+            if (!$found) {
+                json_error('Kode QR karyawan tidak dikenali atau sudah tidak aktif.', 404);
+            }
+            $rec = today_record((int) $found['id']);
+            if (!$rec || !$rec['jam_masuk']) {
+                $res = do_checkin(
+                    $found,
+                    null,
+                    is_string(param('foto')) ? param('foto') : null,
+                    param('lat'),
+                    param('lng'),
+                    param('akurasi'),
+                    param_str('mode', 'wfo'),
+                    (bool) param('palsu', false),
+                    param_str('kegiatan') ?: null,
+                    (int) $found['karyawan_id'],
+                    true
+                );
+                $res['tipe'] = 'masuk';
+                $res['nama'] = $found['nama'];
+                json_response(['ok' => true, 'data' => $res, 'pesan' => "Absen masuk {$found['nama']} berhasil ({$res['jam_masuk']})"]);
+            }
+            if (!$rec['jam_pulang']) {
+                $res = do_checkout(
+                    $found,
+                    null,
+                    is_string(param('foto')) ? param('foto') : null,
+                    param('lat'),
+                    param('lng'),
+                    param('akurasi'),
+                    param_str('mode') ?: null,
+                    (bool) param('palsu', false),
+                    param_str('kegiatan') ?: null,
+                    (int) $found['karyawan_id'],
+                    true
+                );
+                $res['tipe'] = 'pulang';
+                $res['nama'] = $found['nama'];
+                json_response(['ok' => true, 'data' => $res, 'pesan' => "Absen pulang {$found['nama']} berhasil ({$res['jam_pulang']})"]);
+            }
+            json_error('Anda sudah menyelesaikan absen masuk dan pulang hari ini.', 409);
+
         case 'absensi.today':
             $user = require_login();
             json_response(['ok' => true, 'data' => own_today($user), 'riwayat' => riwayat_karyawan((int) $user['id'], 7), 'ringkasan' => ringkasan_bulanan((int) $user['id'])]);
@@ -120,7 +224,7 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Absen pulang berhasil']);
 
         case 'absensi.izin':
-            $actor = require_role(['karyawan', 'admin', 'atasan']);
+            $actor = require_role(['admin']);
             $targetUser = $actor;
             $targetId = (int) param('pengguna_id', 0);
             if (in_array($actor['peran'], ['admin', 'atasan'], true) && $targetId > 0) {
@@ -144,9 +248,8 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'data' => $res, 'pesan' => 'Catatan izin/sakit berhasil disimpan']);
 
         case 'absensi.izin_list':
-            $user = require_role(['admin', 'atasan', 'karyawan']);
-            $onlyUserId = $user['peran'] === 'karyawan' ? (int) $user['id'] : null;
-            json_response(['ok' => true, 'data' => daftar_izin((int) $user['organisasi_id'], $onlyUserId)]);
+            $user = require_role(['admin']);
+            json_response(['ok' => true, 'data' => daftar_izin((int) $user['organisasi_id'])]);
 
         case 'kiosk.info':
         case 'kiosk.absen':
@@ -346,9 +449,25 @@ function update_org(array $user): void
 
 function list_karyawan(int $orgId): array
 {
-    $stmt = db()->prepare("SELECT id, nama, email, peran, tim, jabatan, aktif, dibuat_pada FROM pengguna WHERE organisasi_id = ? ORDER BY CASE peran WHEN 'admin' THEN 0 WHEN 'atasan' THEN 1 ELSE 2 END, nama");
+    $pdo = db();
+    $stmt = $pdo->prepare("SELECT p.id, p.nama, p.email, p.peran, p.tim, p.jabatan, p.aktif, p.dibuat_pada, k.kode_qr
+        FROM pengguna p
+        LEFT JOIN karyawan k ON k.legacy_pengguna_id = p.id
+        WHERE p.organisasi_id = ?
+        ORDER BY CASE p.peran WHEN 'admin' THEN 0 WHEN 'atasan' THEN 1 ELSE 2 END, p.nama");
     $stmt->execute([$orgId]);
-    return $stmt->fetchAll();
+    $rows = $stmt->fetchAll();
+
+    foreach ($rows as &$r) {
+        if ($r['peran'] === 'karyawan' && empty($r['kode_qr'])) {
+            $newQr = generate_personal_qr($pdo);
+            $ins = $pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $ins->execute([$orgId, $r['nama'], $newQr, (int) $r['aktif'], $r['tim'], $r['jabatan'], (int) $r['id'], $r['dibuat_pada'] ?: date('Y-m-d H:i:s')]);
+            $r['kode_qr'] = $newQr;
+        }
+    }
+    unset($r);
+    return $rows;
 }
 
 function list_tim(int $orgId): array
@@ -358,12 +477,33 @@ function list_tim(int $orgId): array
     return array_column($stmt->fetchAll(), 'tim');
 }
 
+function sync_karyawan_qr_row(PDO $pdo, int $orgId, int $penggunaId, string $nama, string $peran, string $tim, string $jabatan, int $aktif, string $now): void
+{
+    $find = $pdo->prepare('SELECT id FROM karyawan WHERE legacy_pengguna_id = ?');
+    $find->execute([$penggunaId]);
+    $existingId = $find->fetchColumn();
+    if ($peran !== 'karyawan') {
+        if ($existingId) {
+            $pdo->prepare('UPDATE karyawan SET aktif = 0 WHERE id = ?')->execute([(int) $existingId]);
+        }
+        return;
+    }
+    if ($existingId) {
+        $pdo->prepare('UPDATE karyawan SET nama = ?, tim = ?, jabatan = ?, aktif = ? WHERE id = ?')
+            ->execute([$nama, $tim, $jabatan, $aktif, (int) $existingId]);
+    } else {
+        $kodeQr = generate_personal_qr($pdo);
+        $pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$orgId, $nama, $kodeQr, $aktif, $tim, $jabatan, $penggunaId, $now]);
+    }
+}
+
 function save_karyawan(array $actor, array $data): int
 {
     $nama = clean_text($data['nama'] ?? '', 150);
     $email = strtolower(trim((string) ($data['email'] ?? '')));
     $peran = (string) ($data['peran'] ?? 'karyawan');
-    $tim = clean_text($data['tim'] ?? '', 100) ?: 'Umum';
+    $tim = clean_text($data['tim'] ?? '', 100) ?: 'Redaksi';
     $jabatan = clean_text($data['jabatan'] ?? '', 100);
     $aktif = isset($data['aktif']) ? (int) (bool) $data['aktif'] : 1;
     $id = (int) ($data['id'] ?? 0);
@@ -376,41 +516,53 @@ function save_karyawan(array $actor, array $data): int
         json_error('Peran tidak valid.', 422);
     }
 
-    $exists = db()->prepare('SELECT id FROM pengguna WHERE email = ? AND id <> ?');
+    $pdo = db();
+    $exists = $pdo->prepare('SELECT id FROM pengguna WHERE email = ? AND id <> ?');
     $exists->execute([$email, $id]);
     if ($exists->fetch()) {
         json_error('Email sudah dipakai pengguna lain.', 409);
     }
 
     $now = date('Y-m-d H:i:s');
-    $minPassLen = $peran === 'admin' ? MIN_ADMIN_PASSWORD : 6;
+    $orgId = (int) $actor['organisasi_id'];
     if ($id > 0) {
-        $chk = db()->prepare('SELECT id FROM pengguna WHERE id = ? AND organisasi_id = ?');
-        $chk->execute([$id, $actor['organisasi_id']]);
+        $chk = $pdo->prepare('SELECT id FROM pengguna WHERE id = ? AND organisasi_id = ?');
+        $chk->execute([$id, $orgId]);
         if (!$chk->fetch()) {
             json_error('Karyawan tidak ditemukan.', 404);
         }
         if ($password !== '') {
+            $minPassLen = $peran === 'admin' ? MIN_ADMIN_PASSWORD : 6;
             if (strlen($password) < $minPassLen) {
                 json_error("Kata sandi minimal {$minPassLen} karakter.", 422);
             }
-            $stmt = db()->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=?, kata_sandi=? WHERE id=? AND organisasi_id=?');
-            $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, password_hash($password, PASSWORD_DEFAULT), $id, $actor['organisasi_id']]);
+            $stmt = $pdo->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=?, kata_sandi=? WHERE id=? AND organisasi_id=?');
+            $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, password_hash($password, PASSWORD_DEFAULT), $id, $orgId]);
         } else {
-            $stmt = db()->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=? WHERE id=? AND organisasi_id=?');
-            $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, $id, $actor['organisasi_id']]);
+            $stmt = $pdo->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=? WHERE id=? AND organisasi_id=?');
+            $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, $id, $orgId]);
         }
-        write_audit((int) $actor['id'], (int) $actor['organisasi_id'], 'update_karyawan', $email);
+        sync_karyawan_qr_row($pdo, $orgId, $id, $nama, $peran, $tim, $jabatan, $aktif, $now);
+        write_audit((int) $actor['id'], $orgId, 'update_karyawan', $email);
         return $id;
     }
 
-    if (strlen($password) < $minPassLen) {
-        json_error("Kata sandi minimal {$minPassLen} karakter.", 422);
+    if ($peran === 'admin') {
+        if (strlen($password) < MIN_ADMIN_PASSWORD) {
+            json_error('Kata sandi admin minimal ' . MIN_ADMIN_PASSWORD . ' karakter.', 422);
+        }
+        $plainPass = $password;
+    } else {
+        $plainPass = $password !== '' ? $password : bin2hex(random_bytes(16));
+        if ($password !== '' && strlen($password) < 6) {
+            json_error('Kata sandi minimal 6 karakter.', 422);
+        }
     }
-    $stmt = db()->prepare('INSERT INTO pengguna (organisasi_id, nama, email, kata_sandi, peran, tim, jabatan, aktif, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$actor['organisasi_id'], $nama, $email, password_hash($password, PASSWORD_DEFAULT), $peran, $tim, $jabatan, $aktif, $now]);
-    $newId = (int) db()->lastInsertId();
-    write_audit((int) $actor['id'], (int) $actor['organisasi_id'], 'tambah_karyawan', $email);
+    $stmt = $pdo->prepare('INSERT INTO pengguna (organisasi_id, nama, email, kata_sandi, peran, tim, jabatan, aktif, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$orgId, $nama, $email, password_hash($plainPass, PASSWORD_DEFAULT), $peran, $tim, $jabatan, $aktif, $now]);
+    $newId = (int) $pdo->lastInsertId();
+    sync_karyawan_qr_row($pdo, $orgId, $newId, $nama, $peran, $tim, $jabatan, $aktif, $now);
+    write_audit((int) $actor['id'], $orgId, 'tambah_karyawan', $email);
     return $newId;
 }
 
@@ -421,9 +573,36 @@ function toggle_karyawan(array $actor): void
     if ($id === (int) $actor['id']) {
         json_error('Anda tidak dapat menonaktifkan akun sendiri.', 422);
     }
-    $stmt = db()->prepare('UPDATE pengguna SET aktif = ? WHERE id = ? AND organisasi_id = ?');
+    $pdo = db();
+    $stmt = $pdo->prepare('UPDATE pengguna SET aktif = ? WHERE id = ? AND organisasi_id = ?');
     $stmt->execute([$aktif, $id, $actor['organisasi_id']]);
+    $pdo->prepare('UPDATE karyawan SET aktif = ? WHERE legacy_pengguna_id = ? AND organisasi_id = ?')
+        ->execute([$aktif, $id, $actor['organisasi_id']]);
     write_audit((int) $actor['id'], (int) $actor['organisasi_id'], 'toggle_karyawan', "id={$id} aktif={$aktif}");
+}
+
+function rotate_karyawan_qr(array $actor, int $penggunaId): string
+{
+    $pdo = db();
+    $orgId = (int) $actor['organisasi_id'];
+    $chk = $pdo->prepare("SELECT id, nama, tim, jabatan, aktif, dibuat_pada FROM pengguna WHERE id = ? AND organisasi_id = ? AND peran = 'karyawan'");
+    $chk->execute([$penggunaId, $orgId]);
+    $emp = $chk->fetch();
+    if (!$emp) {
+        json_error('Karyawan tidak ditemukan.', 404);
+    }
+    $newQr = generate_personal_qr($pdo);
+    $find = $pdo->prepare('SELECT id FROM karyawan WHERE legacy_pengguna_id = ?');
+    $find->execute([$penggunaId]);
+    $kid = $find->fetchColumn();
+    if ($kid) {
+        $pdo->prepare('UPDATE karyawan SET kode_qr = ? WHERE id = ?')->execute([$newQr, (int) $kid]);
+    } else {
+        $pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$orgId, $emp['nama'], $newQr, (int) $emp['aktif'], $emp['tim'], $emp['jabatan'], $penggunaId, $emp['dibuat_pada'] ?: date('Y-m-d H:i:s')]);
+    }
+    write_audit((int) $actor['id'], $orgId, 'rotate_qr', "pengguna={$penggunaId}");
+    return $newQr;
 }
 
 function own_today(array $user): array

@@ -21,6 +21,7 @@ if (is_file($rootDir . '/.htaccess')) {
     $hta = (string) file_get_contents($rootDir . '/.htaccess');
     check(str_contains($hta, 'Options -Indexes'), 'Root .htaccess disables directory listing');
     check(str_contains($hta, '.git') && str_contains($hta, 'sqlite'), 'Root .htaccess blocks .git and sqlite files');
+    check(str_contains($hta, 'uploads'), 'Root .htaccess blocks direct access to backend/uploads');
 }
 check(is_file($rootDir . '/router.php'), 'router.php exists for safe PHP built-in dev server routing');
 
@@ -41,6 +42,13 @@ $insUser->execute([1, 'Admin HR', 'admin@sec.test', $hash, 'admin', 'HR', 'Manag
 $adminId = (int) $pdo->lastInsertId();
 $insUser->execute([1, 'Karyawan Uji', 'kary@sec.test', $hash, 'karyawan', 'Ops', 'Staf', 1, $now]);
 $karyId = (int) $pdo->lastInsertId();
+$insUser->execute([1, 'Karyawan Nonaktif', 'off@sec.test', $hash, 'karyawan', 'Ops', 'Staf', 0, $now]);
+$offId = (int) $pdo->lastInsertId();
+
+$pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    ->execute([1, 'Karyawan Uji', 'KTK-SEC-AKTIF-01', 1, 'Ops', 'Staf', $karyId, $now]);
+$pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    ->execute([1, 'Karyawan Nonaktif', 'KTK-SEC-NONAKTIF-02', 0, 'Ops', 'Staf', $offId, $now]);
 
 // Seed an HR-corrected row and a checked-in row for Karyawan Uji
 $yesterday = date('Y-m-d', strtotime('-1 day'));
@@ -110,9 +118,9 @@ function secReq(string $url, ?string $cookieFile = null, ?array $postJson = null
 $base = "http://127.0.0.1:{$port}";
 
 // A) Dev server router protection against direct access to sensitive files
-foreach (['/backend/data/absensi_dev.sqlite', '/backend/app/config.php', '/.git/HEAD', '/tests/backend_auth_privacy_test.php'] as $sensitivePath) {
+foreach (['/backend/data/absensi_dev.sqlite', '/backend/app/config.php', '/backend/uploads/sample.jpg', '/.git/HEAD', '/tests/backend_auth_privacy_test.php'] as $sensitivePath) {
     $res = secReq($base . $sensitivePath);
-    check($res['code'] === 403 || $res['code'] === 404, "Sensitive path {$sensitivePath} blocked (got {$res['code']})");
+    check($res['code'] === 403, "Sensitive path {$sensitivePath} explicitly returns 403 (got {$res['code']})");
 }
 
 // B) Security headers on API responses
@@ -121,18 +129,52 @@ check(str_contains($csrfRes['headers'], 'x-content-type-options: nosniff'), 'API
 check(str_contains($csrfRes['headers'], 'x-frame-options: deny'), 'API sets X-Frame-Options: DENY');
 check(str_contains($csrfRes['headers'], 'referrer-policy:'), 'API sets Referrer-Policy header');
 
-// C) Employee cannot overwrite HR-corrected or already-checked-in record via absensi.izin
-$csrfKary = $csrfRes['json']['csrf'] ?? '';
-secReq("{$base}/backend/api.php?action=auth.login", $ckKary, ['email' => 'kary@sec.test', 'kata_sandi' => 'Secret123!'], $csrfKary);
-$izinOverwriteHr = secReq("{$base}/backend/api.php?action=absensi.izin", $ckKary, [
-    'jenis' => 'izin', 'mulai' => $yesterday, 'sampai' => $yesterday, 'catatan' => 'Coba timpa koreksi HR'
-], $csrfKary);
-check($izinOverwriteHr['code'] === 422, "Employee cannot overwrite HR-corrected record via absensi.izin (got {$izinOverwriteHr['code']})");
+// C) Security checks: qr.lookup rejects GET (405), rate-limits brute force, and admin-only routes block unauthenticated/non-admin
+$qrGet = secReq("{$base}/backend/api.php?action=qr.lookup&kode_qr=ABC");
+check($qrGet['code'] === 405, "qr.lookup rejects GET requests with 405 (got {$qrGet['code']})");
 
-$izinOverwriteCheckin = secReq("{$base}/backend/api.php?action=absensi.izin", $ckKary, [
-    'jenis' => 'izin', 'mulai' => $today, 'sampai' => $today, 'catatan' => 'Coba timpa absen masuk'
-], $csrfKary);
-check($izinOverwriteCheckin['code'] === 422, "Employee cannot overwrite checked-in day via absensi.izin (got {$izinOverwriteCheckin['code']})");
+$csrfPub = $csrfRes['json']['csrf'] ?? '';
+$qrNoCsrf = secReq("{$base}/backend/api.php?action=qr.lookup", null, ['kode_qr' => 'ABC']);
+check($qrNoCsrf['code'] === 419, "qr.lookup requires CSRF token (got {$qrNoCsrf['code']})");
+
+$qrInactive = secReq("{$base}/backend/api.php?action=qr.lookup", $ckKary, ['kode_qr' => 'KTK-SEC-NONAKTIF-02'], $csrfPub);
+check($qrInactive['code'] === 404, "qr.lookup rejects inactive employee QR with 404 (got {$qrInactive['code']})");
+
+$qrArrayPayload = secReq("{$base}/backend/api.php?action=qr.lookup", $ckKary, ['kode_qr' => ['nested' => 'array']], $csrfPub);
+check($qrArrayPayload['code'] === 404 && is_array($qrArrayPayload['json']), "qr.lookup handles non-string kode_qr safely without PHP warning/500 (got {$qrArrayPayload['code']})");
+
+$rateBlocked = false;
+for ($i = 0; $i < 22; $i++) {
+    $r = secReq("{$base}/backend/api.php?action=qr.lookup", $ckKary, ['kode_qr' => "GUESS-{$i}"], $csrfPub);
+    if ($r['code'] === 429) { $rateBlocked = true; break; }
+}
+check($rateBlocked, 'qr.lookup rate-limits brute-force QR guessing with 429');
+
+$izinUnauth = secReq("{$base}/backend/api.php?action=absensi.izin_list");
+check($izinUnauth['code'] === 401, "absensi.izin_list requires admin auth (got {$izinUnauth['code']})");
+
+// C2) Personal QR & media endpoints security checks
+$qrAbsenGet = secReq("{$base}/backend/api.php?action=qr.absen");
+check($qrAbsenGet['code'] === 405, "qr.absen rejects GET requests with 405 (got {$qrAbsenGet['code']})");
+
+$qrAbsenNoCsrf = secReq("{$base}/backend/api.php?action=qr.absen", null, ['kode_qr' => 'KTK-SEC-AKTIF-01']);
+check($qrAbsenNoCsrf['code'] === 419, "qr.absen requires CSRF token (got {$qrAbsenNoCsrf['code']})");
+
+$qrRotateGet = secReq("{$base}/backend/api.php?action=karyawan.rotate_qr&id=2");
+check($qrRotateGet['code'] === 405, "karyawan.rotate_qr rejects GET requests with 405 (got {$qrRotateGet['code']})");
+
+$qrAbsenRate = false;
+for ($i = 0; $i < 13; $i++) {
+    $r = secReq("{$base}/backend/api.php?action=qr.absen", $ckKary, ['kode_qr' => "BAD-{$i}"], $csrfPub);
+    if ($r['code'] === 429) { $qrAbsenRate = true; break; }
+}
+check($qrAbsenRate, 'qr.absen rate-limits repeated submissions with 429');
+
+$mediaUnauth = secReq("{$base}/backend/media.php?f=test_123.jpg");
+check($mediaUnauth['code'] === 302 || $mediaUnauth['code'] === 401, "media.php blocks unauthenticated requests (got {$mediaUnauth['code']})");
+
+$rotateUnauth = secReq("{$base}/backend/api.php?action=karyawan.rotate_qr", $ckKary, ['id' => 2], $csrfPub);
+check($rotateUnauth['code'] === 401, "karyawan.rotate_qr rejects unauthenticated POST with 401 (got {$rotateUnauth['code']})");
 
 // D) Admin password policy, org time validation, and klaster bounds
 $csrfAdm = secReq("{$base}/backend/api.php?action=auth.csrf", $ckAdm)['json']['csrf'] ?? '';

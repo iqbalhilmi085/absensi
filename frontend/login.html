@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Masuk · Absensi Ketik.com</title>
+<title>Presensi Redaksi &amp; Portal Admin · Ketik.com</title>
 <link rel="icon" href="assets/img/ketik-icon.png" type="image/png">
 <script>
   document.documentElement.dataset.theme =
@@ -13,125 +13,443 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/app.css">
 </head>
-<body class="auth-body">
-<div class="auth-shell">
-  <section class="auth-hero" aria-label="Informasi Portal Ketik.com">
-    <div class="auth-hero-inner">
-      <div class="brand-logo-pill">
+<body class="ketik-portal-body">
+  <header class="ketik-header">
+    <div class="ketik-header-inner">
+      <div class="ketik-logo-link">
         <img src="assets/img/ketik-logo.png" alt="Ketik.com — Media Kolaborasi Indonesia">
       </div>
-      <div class="auth-hero-badge">
-        <svg class="ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
-        <span>Portal Absensi Internal · PT Ketik Media Siber</span>
-      </div>
-      <h2>Sistem Kehadiran Redaksi &amp; Kantor Ketik.com</h2>
-      <p>Portal presensi terpadu untuk tim redaksi, liputan, editor, IT, bisnis, dan manajemen PT Ketik Media Siber.</p>
-      <div class="auth-features">
-        <div class="auth-feature">
-          <div class="auth-feature-ico">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01"/></svg>
-          </div>
-          <div>
-            <strong>Presensi Kantor Redaksi (WFO)</strong>
-            <span>Validasi kode QR kantor, foto kehadiran, dan radius GPS secara akurat.</span>
-          </div>
-        </div>
-        <div class="auth-feature">
-          <div class="auth-feature-ico">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          </div>
-          <div>
-            <strong>WFH &amp; Liputan Lapangan + Kegiatan</strong>
-            <span>Reporter dan tim remote dapat absen dengan melampirkan rencana dan ringkasan kegiatan.</span>
-          </div>
-        </div>
-        <div class="auth-feature">
-          <div class="auth-feature-ico">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-          </div>
-          <div>
-            <strong>Rekap Kehadiran &amp; Laporan HR</strong>
-            <span>Pantau kehadiran per divisi, ekspor laporan Excel/PDF, dan evaluasi kedisiplinan tim.</span>
-          </div>
-        </div>
+      <div class="ketik-header-meta">
+        <strong>Portal Presensi Redaksi &amp; Liputan</strong>
+        <span class="tabular" id="portal-clock">PT Ketik Media Siber · Surabaya</span>
       </div>
     </div>
-    <div class="auth-hero-foot">
-      PT Ketik Media Siber · Jl. Ketintang Permai Blok BA No.21, Surabaya
-    </div>
-  </section>
+  </header>
 
-  <main class="auth-panel">
-    <div class="glass auth-card">
-      <div class="brand">
-        <span class="brand-icon-box" aria-hidden="true">
-          <img src="assets/img/ketik-icon.png" alt="Ikon Ketik.com">
-        </span>
-        <div class="auth-card-head">
-          <h1>Masuk ke Portal Ketik.com</h1>
-          <p>Gunakan akun karyawan, redaktur/atasan, atau admin HR</p>
-        </div>
+  <nav class="ketik-nav-strip" aria-label="Navigasi Portal Ketik.com">
+    <div class="ketik-nav-inner">
+      <div class="ketik-tabs">
+        <button type="button" class="ketik-tab active" id="tab-qr" data-tab="qr">
+          <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3h-3M14 20h7"/></svg>
+          <span>Presensi Scan QR</span>
+        </button>
+        <button type="button" class="ketik-tab" id="tab-admin" data-tab="admin">
+          <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>Login Admin</span>
+        </button>
       </div>
+      <span class="ketik-nav-tag">Media Kolaborasi Indonesia</span>
+    </div>
+  </nav>
 
-      <div id="alert" class="alert alert-error" role="alert" hidden></div>
+  <main class="ketik-portal-main">
+    <section id="panel-qr">
+      <div class="ketik-portal-grid">
+        <div class="glass card stack">
+          <div class="card-head" style="margin-bottom:4px">
+            <div>
+              <h2>1. Pindai Kartu QR Pribadi</h2>
+              <p class="muted small">Khusus karyawan redaksi &amp; reporter liputan di lapangan (tanpa login)</p>
+            </div>
+            <span class="shift-tag">QR Pribadi</span>
+          </div>
 
-      <form id="login-form" class="form">
-        <label class="field">
-          <span>Email Kantor / Redaksi</span>
-          <input type="email" name="email" autocomplete="username" required placeholder="nama@ketik.com">
-        </label>
-        <label class="field">
-          <span>Kata Sandi</span>
-          <div class="pass-wrap">
-            <input type="password" name="kata_sandi" id="login-pass" autocomplete="current-password" required placeholder="Masukkan kata sandi">
-            <button type="button" class="pass-toggle" id="toggle-pass" aria-label="Tampilkan kata sandi" title="Tampilkan atau sembunyikan kata sandi">
-              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          <div class="cam-wrap" id="qr-cam-box" hidden>
+            <video id="qr-video" playsinline muted autoplay></video>
+            <div class="scan-frame"></div>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-primary" id="qr-scan-start">
+              <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+              <span>Aktifkan Kamera Scan QR</span>
             </button>
+            <button type="button" class="btn btn-secondary" id="qr-scan-stop" hidden>Hentikan Kamera</button>
           </div>
-        </label>
-        <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">Masuk ke Portal</button>
-      </form>
+          <p class="muted small" id="qr-scan-status">Klik tombol di atas untuk memindai QR Kartu Pers Anda, atau ketik kode QR di bawah.</p>
 
-      <div class="auth-foot-note">
-        Belum punya akun atau lupa kata sandi? Hubungi Admin HR PT Ketik Media Siber.
+          <div class="auth-divider">atau masukkan kode QR pribadi</div>
+
+          <form id="qr-manual-form" class="form" style="gap:10px">
+            <div style="display:flex;gap:8px">
+              <input type="text" id="qr-manual-code" placeholder="Contoh: KTK-XXXX..." autocomplete="off">
+              <button type="submit" class="btn btn-secondary" id="qr-lookup-btn">Cek QR</button>
+            </div>
+          </form>
+
+          <div id="qr-lookup-err" class="alert alert-error" hidden></div>
+        </div>
+
+        <div class="glass card stack" id="qr-action-card">
+          <div class="card-head" style="margin-bottom:4px">
+            <div>
+              <h2>2. Konfirmasi Mode &amp; Presensi</h2>
+              <p class="muted small">Identitas karyawan akan muncul otomatis setelah QR valid</p>
+            </div>
+          </div>
+
+          <div id="qr-placeholder" class="activity-box">
+            <strong>Menunggu Scan QR Pribadi</strong>
+            <p class="muted small" style="margin-top:4px">
+              Scan QR pribadi Anda di sebelah kiri untuk memilih mode <b>Kantor Redaksi (WFO)</b> atau <b>Liputan Lapangan / WFH</b>, lalu ambil foto bukti &amp; kirim absen.
+            </p>
+          </div>
+
+          <div id="qr-emp-panel" class="stack" hidden>
+            <div class="config-summary" style="justify-content:space-between">
+              <div>
+                <div style="font-weight:700;font-size:15px;color:var(--text)" id="qr-emp-nama">—</div>
+                <div class="small muted" id="qr-emp-meta">—</div>
+              </div>
+              <span class="badge badge-netral" id="qr-emp-badge">Belum Absen</span>
+            </div>
+
+            <div id="qr-done-box" class="alert alert-ok" hidden></div>
+
+            <div id="qr-form-box" class="form">
+              <div class="field" id="qr-mode-wrap">
+                <span>Mode Kerja Saat Ini</span>
+                <div class="mode-switch" id="qr-mode-switch">
+                  <button type="button" class="mode-opt active" data-mode="wfo">
+                    <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+                    <div>
+                      <span class="mode-opt-title">Kantor Redaksi (WFO)</span>
+                      <span class="mode-opt-desc">Di kantor Ketik.com</span>
+                    </div>
+                  </button>
+                  <button type="button" class="mode-opt" data-mode="wfh">
+                    <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    <div>
+                      <span class="mode-opt-title">Liputan / WFH</span>
+                      <span class="mode-opt-desc">Di lapangan + kegiatan</span>
+                    </div>
+                  </button>
+                </div>
+                <div class="muted small" id="qr-mode-hint" style="margin-top:4px"></div>
+              </div>
+
+              <label class="field">
+                <span id="qr-keg-label">Catatan Liputan / Kegiatan</span>
+                <textarea id="qr-kegiatan" placeholder="Contoh: Liputan konferensi pers di Balai Kota dan kirim berita ke redaktur"></textarea>
+              </label>
+
+              <div id="qr-submit-err" class="alert alert-error" hidden></div>
+              <div id="qr-submit-ok" class="alert alert-ok" hidden></div>
+
+              <button type="button" class="btn btn-primary btn-lg btn-block" id="qr-submit-btn">
+                Ambil Foto &amp; Kirim Absen
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
+
+    <section id="panel-admin" class="ketik-admin-wrap" hidden>
+      <div class="glass card stack" style="padding:28px">
+        <div class="brand">
+          <span class="brand-icon-box" aria-hidden="true">
+            <img src="assets/img/ketik-icon.png" alt="Ikon Ketik.com">
+          </span>
+          <div>
+            <h1>Login Admin Ketik.com</h1>
+            <p class="muted small">Akses khusus Admin HR &amp; Pengelola Redaksi</p>
+          </div>
+        </div>
+
+        <div id="alert" class="alert alert-error" role="alert" hidden></div>
+
+        <form id="login-form" class="form">
+          <label class="field">
+            <span>Email Admin</span>
+            <input type="email" name="email" autocomplete="username" required placeholder="nama@ketik.com">
+          </label>
+          <label class="field">
+            <span>Kata Sandi</span>
+            <div class="pass-wrap">
+              <input type="password" name="kata_sandi" id="login-pass" autocomplete="current-password" required placeholder="Masukkan kata sandi admin">
+              <button type="button" class="pass-toggle" id="toggle-pass" aria-label="Tampilkan kata sandi" title="Tampilkan atau sembunyikan kata sandi">
+                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </label>
+          <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">Masuk sebagai Admin</button>
+        </form>
+
+        <div class="auth-foot-note">
+          Website dashboard hanya dapat diakses oleh Admin. Karyawan redaksi &amp; liputan melakukan presensi melalui tab <b>Presensi Scan QR</b>.
+        </div>
+      </div>
+    </section>
   </main>
-</div>
 
-<script src="assets/js/config.js"></script>
-<script src="assets/js/api.js"></script>
-<script>
-  const form = document.getElementById('login-form');
-  const alertBox = document.getElementById('alert');
-  const btn = document.getElementById('login-btn');
-  const passInput = document.getElementById('login-pass');
-  const togglePass = document.getElementById('toggle-pass');
+  <footer class="ketik-portal-foot">
+    PT Ketik Media Siber (Ketik.com) · Jl. Ketintang Permai Blok BA No.21, Surabaya · Sistem Presensi Internal
+  </footer>
 
-  togglePass.addEventListener('click', () => {
-    const show = passInput.type === 'password';
-    passInput.type = show ? 'text' : 'password';
-    togglePass.setAttribute('aria-label', show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi');
-  });
+  <div id="modal-root"></div>
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    alertBox.hidden = true;
-    btn.disabled = true;
-    btn.textContent = 'Memverifikasi…';
-    try {
-      await Api.post('auth.login', {
-        email: form.email.value,
-        kata_sandi: form.kata_sandi.value
-      });
-      location.href = 'index.html';
-    } catch (err) {
-      alertBox.textContent = err.message || 'Gagal masuk. Periksa kembali email dan kata sandi.';
-      alertBox.hidden = false;
-      btn.disabled = false;
-      btn.textContent = 'Masuk ke Portal';
+  <script src="assets/vendor/jsQR.js"></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/scanner.js"></script>
+  <script>
+    const byId = (id) => document.getElementById(id);
+
+    // Jam real-time di header
+    function tickClock() {
+      const n = new Date();
+      const hari = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][n.getDay()];
+      const bln = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][n.getMonth()];
+      const jam = `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`;
+      byId('portal-clock').textContent = `${hari}, ${n.getDate()} ${bln} ${n.getFullYear()} · ${jam} WIB`;
     }
-  });
-</script>
+    tickClock();
+    setInterval(tickClock, 1000);
+
+    // Tab switcher (Scan QR vs Login Admin)
+    let qrStream = null;
+    let qrRaf = null;
+    function stopInlineScanner() {
+      if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = null; }
+      if (qrStream) { qrStream.getTracks().forEach((t) => t.stop()); qrStream = null; }
+      byId('qr-cam-box').hidden = true;
+      byId('qr-scan-start').hidden = false;
+      byId('qr-scan-stop').hidden = true;
+    }
+
+    function switchTab(tab) {
+      const isQr = tab === 'qr';
+      byId('tab-qr').classList.toggle('active', isQr);
+      byId('tab-admin').classList.toggle('active', !isQr);
+      byId('panel-qr').hidden = !isQr;
+      byId('panel-admin').hidden = isQr;
+      if (!isQr) stopInlineScanner();
+    }
+    byId('tab-qr').addEventListener('click', () => switchTab('qr'));
+    byId('tab-admin').addEventListener('click', () => switchTab('admin'));
+
+    // Password toggle & Admin Login
+    const form = byId('login-form');
+    const alertBox = byId('alert');
+    const btn = byId('login-btn');
+    const passInput = byId('login-pass');
+    byId('toggle-pass').addEventListener('click', () => {
+      const show = passInput.type === 'password';
+      passInput.type = show ? 'text' : 'password';
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertBox.hidden = true;
+      btn.disabled = true;
+      btn.textContent = 'Memverifikasi…';
+      try {
+        await Api.post('auth.login', {
+          email: form.email.value,
+          kata_sandi: form.kata_sandi.value
+        });
+        location.href = 'index.html';
+      } catch (err) {
+        alertBox.textContent = err.message || 'Gagal masuk. Hanya Admin yang dapat mengakses website ini.';
+        alertBox.hidden = false;
+        btn.disabled = false;
+        btn.textContent = 'Masuk sebagai Admin';
+      }
+    });
+
+    // Presensi QR Pribadi Redaksi & Liputan
+    let activeQrCode = '';
+    let activeLookup = null;
+    let selectedMode = 'wfo';
+
+    function updateModeHint() {
+      if (!activeLookup) return;
+      const a = activeLookup.aturan || {};
+      const st = activeLookup.hari_ini.state;
+      const modeUsed = st === 'in' ? selectedMode : ((activeLookup.hari_ini.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo');
+      const wfoHint = [
+        a.wajib_foto ? 'foto selfie' : null,
+        a.radius_masuk_m > 0 ? `area kantor maks ${a.radius_masuk_m} m` : (a.wajib_gps ? 'GPS aktif' : null)
+      ].filter(Boolean).join(' & ') || 'konfirmasi langsung';
+      const wfhHint = `${a.wajib_foto ? 'foto selfie & ' : ''}wajib isi catatan liputan/kegiatan`;
+      byId('qr-mode-hint').textContent = modeUsed === 'wfh' ? `Syarat Liputan/WFH: ${wfhHint}.` : `Syarat Kantor (WFO): ${wfoHint}.`;
+      byId('qr-keg-label').textContent = modeUsed === 'wfh'
+        ? 'Catatan Liputan / Kegiatan (Wajib diisi)'
+        : 'Catatan Kegiatan (Opsional untuk WFO)';
+    }
+
+    function renderLookup(data) {
+      activeLookup = data;
+      const k = data.karyawan;
+      const h = data.hari_ini;
+      byId('qr-placeholder').hidden = true;
+      byId('qr-emp-panel').hidden = false;
+      byId('qr-submit-err').hidden = true;
+      byId('qr-submit-ok').hidden = true;
+
+      byId('qr-emp-nama').textContent = k.nama;
+      byId('qr-emp-meta').textContent = `${k.tim}${k.jabatan ? ' · ' + k.jabatan : ''}`;
+      const badgeEl = byId('qr-emp-badge');
+      if (h.state === 'in') {
+        badgeEl.className = 'badge badge-netral';
+        badgeEl.textContent = 'Belum Absen Masuk';
+        byId('qr-done-box').hidden = true;
+        byId('qr-form-box').hidden = false;
+        byId('qr-mode-wrap').hidden = false;
+        byId('qr-kegiatan').value = '';
+        selectedMode = 'wfo';
+        byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b.dataset.mode === 'wfo'));
+        byId('qr-submit-btn').textContent = 'Ambil Foto & Kirim Absen Masuk';
+      } else if (h.state === 'out') {
+        badgeEl.className = 'badge badge-hadir';
+        badgeEl.textContent = `Masuk ${String(h.jam_masuk || '').slice(0, 5)}`;
+        byId('qr-done-box').hidden = true;
+        byId('qr-form-box').hidden = false;
+        byId('qr-mode-wrap').hidden = true;
+        selectedMode = (h.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo';
+        byId('qr-kegiatan').value = h.kegiatan || '';
+        byId('qr-submit-btn').textContent = 'Ambil Foto & Kirim Absen Pulang';
+      } else {
+        badgeEl.className = 'badge badge-hadir';
+        badgeEl.textContent = 'Selesai Hari Ini';
+        byId('qr-form-box').hidden = true;
+        byId('qr-done-box').hidden = false;
+        byId('qr-done-box').textContent = `Presensi hari ini lengkap: Masuk ${String(h.jam_masuk || '').slice(0, 5)} · Pulang ${String(h.jam_pulang || '').slice(0, 5)}.`;
+      }
+      updateModeHint();
+    }
+
+    async function lookupQr(code) {
+      const clean = String(code || '').trim();
+      const errEl = byId('qr-lookup-err');
+      errEl.hidden = true;
+      if (!clean) {
+        errEl.textContent = 'Masukkan atau scan kode QR pribadi terlebih dahulu.';
+        errEl.hidden = false;
+        return;
+      }
+      try {
+        const res = await Api.post('qr.lookup', { kode_qr: clean });
+        activeQrCode = clean;
+        byId('qr-manual-code').value = clean;
+        renderLookup(res.data);
+        byId('qr-scan-status').textContent = `QR valid terdeteksi (${res.data.karyawan.nama}).`;
+      } catch (err) {
+        errEl.textContent = err.message || 'Kode QR tidak dikenali.';
+        errEl.hidden = false;
+      }
+    }
+
+    byId('qr-manual-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      lookupQr(byId('qr-manual-code').value);
+    });
+
+    byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((mBtn) => {
+      mBtn.addEventListener('click', () => {
+        selectedMode = mBtn.dataset.mode === 'wfh' ? 'wfh' : 'wfo';
+        byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b === mBtn));
+        updateModeHint();
+      });
+    });
+
+    byId('qr-scan-start').addEventListener('click', async () => {
+      const statusEl = byId('qr-scan-status');
+      byId('qr-lookup-err').hidden = true;
+      try {
+        qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+        const video = byId('qr-video');
+        video.srcObject = qrStream;
+        await video.play();
+        byId('qr-cam-box').hidden = false;
+        byId('qr-scan-start').hidden = true;
+        byId('qr-scan-stop').hidden = false;
+        statusEl.textContent = 'Arahkan kamera ke QR Kartu Pers pribadi Anda…';
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const tick = () => {
+          if (!qrStream) return;
+          if (video.readyState >= 2 && window.jsQR && video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(img.data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+            if (code && code.data) {
+              stopInlineScanner();
+              lookupQr(code.data);
+              return;
+            }
+          }
+          qrRaf = requestAnimationFrame(tick);
+        };
+        qrRaf = requestAnimationFrame(tick);
+      } catch (err) {
+        stopInlineScanner();
+        statusEl.textContent = 'Kamera tidak tersedia atau izin ditolak. Ketik kode QR pribadi Anda di kotak bawah.';
+      }
+    });
+    byId('qr-scan-stop').addEventListener('click', stopInlineScanner);
+
+    byId('qr-submit-btn').addEventListener('click', async () => {
+      if (!activeLookup || !activeQrCode) return;
+      const errEl = byId('qr-submit-err');
+      const okEl = byId('qr-submit-ok');
+      errEl.hidden = true;
+      okEl.hidden = true;
+
+      const modeUsed = activeLookup.hari_ini.state === 'in'
+        ? selectedMode
+        : ((activeLookup.hari_ini.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo');
+      const kegiatanVal = byId('qr-kegiatan').value.trim();
+      if (modeUsed === 'wfh' && kegiatanVal.length < 3) {
+        errEl.textContent = 'Mohon isi catatan liputan / kegiatan minimal 3 karakter.';
+        errEl.hidden = false;
+        byId('qr-kegiatan').focus();
+        return;
+      }
+
+      const a = activeLookup.aturan || {};
+      const submitBtn = byId('qr-submit-btn');
+      submitBtn.disabled = true;
+      try {
+        const shot = await Scanner.open({
+          mode: modeUsed,
+          wajibBarcode: false,
+          wajibFoto: a.wajib_foto,
+          wajibGps: a.wajib_gps,
+          radius: a.radius_masuk_m,
+          latKantor: a.lat_kantor,
+          lngKantor: a.lng_kantor,
+          title: activeLookup.hari_ini.state === 'in' ? 'Absen Masuk Ketik.com' : 'Absen Pulang Ketik.com'
+        });
+        const payload = {
+          kode_qr: activeQrCode,
+          mode: modeUsed,
+          kegiatan: kegiatanVal,
+          foto: shot.foto,
+          palsu: !!shot.palsu
+        };
+        if (shot.gps) {
+          payload.lat = shot.gps.lat;
+          payload.lng = shot.gps.lng;
+          payload.akurasi = shot.gps.akurasi;
+        }
+        const res = await Api.post('qr.absen', payload);
+        await lookupQr(activeQrCode);
+        byId('qr-submit-ok').textContent = res.pesan || 'Presensi berhasil dicatat.';
+        byId('qr-submit-ok').hidden = false;
+      } catch (err) {
+        if (err.message !== 'dibatalkan') {
+          errEl.textContent = err.message || 'Gagal menyimpan absen.';
+          errEl.hidden = false;
+        }
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
 </body>
 </html>

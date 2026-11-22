@@ -10,7 +10,7 @@ if ($uriPath === '/') {
 }
 
 // Tolak akses langsung ke direktori/berkas sensitif pada PHP built-in server.
-$blockedPrefix = '#^/(\.git|\.agents|\.superpowers|docs|tests|backend/(?:app|data|migrasi|tools)|router\.php)(/|$)#i';
+$blockedPrefix = '#^/(\.git|\.agents|\.superpowers|docs|tests|backend/(?:app|data|migrasi|tools|uploads)|router\.php)(/|$)#i';
 $blockedExt    = '#\.(sqlite|sqlite3|db|sql|md|json|lock|log|ini|htaccess)$#i';
 if (preg_match($blockedPrefix, $uriPath) || preg_match($blockedExt, $uriPath) || str_contains($uriPath, '..')) {
     http_response_code(403);

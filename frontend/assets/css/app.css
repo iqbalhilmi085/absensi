@@ -380,8 +380,8 @@ input[type="checkbox"], input[type="radio"] {
 .shift-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 2px 9px;
+  border-radius: 7px 0 7px 0;
   font-size: 12px;
   font-weight: 600;
   background: var(--accent-soft);
@@ -499,7 +499,169 @@ td.wrap { white-space: normal; min-width: 190px; max-width: 340px; }
   gap: 6px;
 }
 
-/* ---------- Halaman Login Split-Screen Korporat ---------- */
+/* ---------- Portal Ketik.com (Header Editorial + Presensi QR + Admin) ---------- */
+.ketik-portal-body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--bg-page);
+  display: flex;
+  flex-direction: column;
+}
+.ketik-header {
+  background: #ffffff;
+  border-bottom: 1px solid var(--panel-border);
+  padding: 12px clamp(16px, 4vw, 48px);
+}
+.ketik-header-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+.ketik-logo-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ketik-logo-link img {
+  height: 44px;
+  width: auto;
+  display: block;
+}
+.ketik-header-meta {
+  text-align: right;
+  font-size: 12.5px;
+  color: #475569;
+}
+.ketik-header-meta strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+}
+.ketik-nav-strip {
+  background: #0A88C9;
+  border-bottom: 5px solid #3ABCA5;
+  padding: 0 clamp(16px, 4vw, 48px);
+}
+.ketik-nav-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+}
+.ketik-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ketik-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border: none;
+  border-radius: 8px 0 8px 0;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.ketik-tab:hover { background: rgba(255, 255, 255, 0.25); }
+.ketik-tab.active {
+  background: #ffffff;
+  color: #0A88C9;
+}
+.ketik-nav-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e0f2fe;
+  white-space: nowrap;
+}
+.ketik-portal-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px clamp(16px, 4vw, 32px) 48px;
+}
+.ketik-portal-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.15fr);
+  gap: 20px;
+  align-items: start;
+}
+.ketik-admin-wrap {
+  max-width: 440px;
+  margin: 18px auto;
+}
+.ketik-portal-foot {
+  text-align: center;
+  padding: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--line);
+  background: var(--panel-bg);
+}
+
+/* Kartu QR Pribadi Karyawan Redaksi */
+.qr-id-card {
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  color: #0f172a;
+  max-width: 340px;
+  margin: 0 auto;
+  box-shadow: var(--panel-shadow);
+}
+.qr-id-head {
+  background: #0A88C9;
+  border-bottom: 4px solid #3ABCA5;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #ffffff;
+}
+.qr-id-logo {
+  background: #ffffff;
+  padding: 4px 10px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+}
+.qr-id-logo img { height: 22px; width: auto; display: block; }
+.qr-id-body {
+  padding: 18px;
+  text-align: center;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+.qr-id-name { font-size: 17px; font-weight: 700; color: #0f172a; }
+.qr-id-role { font-size: 12.5px; color: #475569; }
+.qr-id-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #0A88C9;
+  border: 1px solid #cbd5e1;
+}
+
 .auth-body {
   min-height: 100vh;
   margin: 0;
@@ -827,7 +989,7 @@ td.wrap { white-space: normal; min-width: 190px; max-width: 340px; }
   gap: 16px;
   padding: 11px clamp(16px, 3vw, 32px);
   background: var(--panel-bg);
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 3px solid var(--ketik-teal);
 }
 .topbar-left {
   display: flex;
@@ -1483,6 +1645,9 @@ canvas.chart { width: 100%; height: 320px; display: block; }
 
 /* ---------- Responsif ---------- */
 @media (max-width: 900px) {
+  .ketik-portal-grid { grid-template-columns: 1fr; }
+  .ketik-nav-tag { display: none; }
+  .ketik-header-meta { text-align: left; }
   .auth-shell { grid-template-columns: 1fr; }
   .auth-hero { padding: 28px 20px; }
   .auth-features { display: none; }
