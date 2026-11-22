@@ -17,9 +17,9 @@
     display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
   }
   .qr-avatar-box {
-    width: 46px; height: 46px; border-radius: 12px; overflow: hidden; flex-shrink: 0;
-    background: var(--surface-subtle); border: 1px solid var(--panel-border);
-    display: grid; place-items: center; font-weight: 700; font-size: 15px; color: var(--brand);
+    width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+    background: var(--accent-soft); border: 2px solid var(--accent-border);
+    display: grid; place-items: center; font-weight: 700; font-size: 15px; color: var(--accent);
   }
   .qr-avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .qr-self-tabs {
@@ -142,6 +142,8 @@
             </div>
 
             <div id="qr-tab-absen" class="stack">
+              <div id="qr-confirm-box" class="qr-confirm-wrap" hidden></div>
+
               <div id="qr-digital-card" class="qr-digital-mini" hidden>
                 <div class="qr-holder" id="qr-digital-svg" style="padding:8px"></div>
                 <div style="min-width:0">
@@ -387,11 +389,70 @@
       byId('qr-tab-absen').hidden = tab !== 'absen';
       byId('qr-tab-riwayat').hidden = tab !== 'riwayat';
       byId('qr-tab-izin').hidden = tab !== 'izin';
+      if (tab === 'absen' && byId('qr-confirm-box')) {
+        if (!byId('qr-confirm-box').hidden && activeLookup?.hari_ini?.state !== 'done') {
+          byId('qr-confirm-box').hidden = true;
+          if (byId('qr-form-box') && activeLookup?.hari_ini?.state !== 'done') byId('qr-form-box').hidden = false;
+        }
+      }
       if (tab === 'riwayat' && activeQrCode) loadSelfRiwayat();
     }
     document.querySelectorAll('[data-qtab]').forEach((b) => {
       b.addEventListener('click', () => switchQTab(b.dataset.qtab));
     });
+
+    function showConfirmScreen(resData, prevLookup) {
+      const box = byId('qr-confirm-box');
+      if (!box) return;
+      const k = (activeLookup && activeLookup.karyawan) || (prevLookup && prevLookup.karyawan) || {};
+      const h = (activeLookup && activeLookup.hari_ini) || (prevLookup && prevLookup.hari_ini) || {};
+      const j = (activeLookup && activeLookup.jadwal_divisi) || (prevLookup && prevLookup.jadwal_divisi) || {};
+      const isAnomali = !!(resData?.anomali || h.anomali);
+      const isLate = (resData?.status || h.status) === 'terlambat';
+      const isWarn = isAnomali || isLate;
+      const jamTampil = String(resData?.jam_pulang || resData?.jam_masuk || h.jam_pulang || h.jam_masuk || '').slice(0, 5) || '--:--';
+      const tipeAksi = resData?.tipe === 'pulang' ? 'Absen pulang tercatat' : (resData?.tipe === 'duplikat_diabaikan' ? 'Presensi sudah tercatat' : 'Absen masuk tercatat');
+      const heading = isAnomali ? 'Tercatat di luar jadwal' : tipeAksi;
+      const badgeCls = isWarn ? 'badge-terlambat' : 'badge-hadir';
+      const badgeTxt = isAnomali ? 'Di luar jadwal' : (isLate ? 'Terlambat' : 'Tepat waktu');
+      const shiftLabel = resData?.shift_nama || h.shift_nama || j.shift_nama || 'Sesuai Divisi';
+      const jamJadwal = (resData?.jam_jadwal_masuk || j.jam_masuk || '08:00') + '–' + (resData?.jam_jadwal_pulang || j.jam_pulang || '17:00');
+      const avatarHtml = k.foto_url
+        ? `<img src="${escHtml(k.foto_url)}" alt="${escHtml(k.nama)}">`
+        : escHtml(String(k.nama || '?').trim().slice(0, 2).toUpperCase());
+      const iconHtml = isWarn
+        ? `<div class="qr-confirm-circle warn" aria-hidden="true">!</div>`
+        : `<div class="qr-confirm-circle ok" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></div>`;
+
+      box.innerHTML = `
+        ${iconHtml}
+        <h2 style="font-size:21px;margin:0">${escHtml(heading)}</h2>
+        <div class="qr-confirm-card">
+          <div class="qr-confirm-avatar">${avatarHtml}</div>
+          <div style="font-size:19px;font-weight:700;color:var(--text)">${escHtml(k.nama || 'Anggota')}</div>
+          <div class="muted small">${escHtml(k.tim || 'Redaksi')} · ${k.tipe === 'magang' ? 'Magang' : 'Karyawan'}</div>
+          <div style="font-size:13.5px;font-weight:600;color:var(--text-secondary)">${escHtml(shiftLabel)} · ${escHtml(jamJadwal)}</div>
+          <div class="qr-confirm-time">${escHtml(jamTampil)}</div>
+          <span class="badge ${badgeCls}">${escHtml(badgeTxt)}</span>
+          ${isWarn ? '<div class="muted small" style="margin-top:2px">Absen tetap tercatat dan akan ditinjau Admin.</div>' : ''}
+        </div>
+        <button type="button" class="btn btn-primary btn-block" id="qc-go-riwayat" style="min-height:44px">Riwayat saya</button>
+        <button type="button" class="btn btn-secondary btn-block" id="qc-go-izin" style="min-height:44px">${isWarn ? 'Ajukan izin / klarifikasi' : 'Ajukan izin'}</button>
+        ${h.state !== 'done' ? '<button type="button" class="btn btn-ghost btn-block" id="qc-back">Kembali ke Form Absen</button>' : ''}`;
+
+      byId('qr-form-box').hidden = true;
+      byId('qr-done-box').hidden = true;
+      byId('qr-digital-card').hidden = true;
+      box.hidden = false;
+
+      byId('qc-go-riwayat')?.addEventListener('click', () => switchQTab('riwayat'));
+      byId('qc-go-izin')?.addEventListener('click', () => switchQTab('izin'));
+      byId('qc-back')?.addEventListener('click', () => {
+        box.hidden = true;
+        if (activeLookup?.hari_ini?.state !== 'done') byId('qr-form-box').hidden = false;
+        byId('qr-digital-card').hidden = false;
+      });
+    }
 
     async function loadSelfRiwayat() {
       if (!activeQrCode) return;
@@ -445,6 +506,7 @@
       const h = data.hari_ini;
       byId('qr-placeholder').hidden = true;
       byId('qr-emp-panel').hidden = false;
+      if (byId('qr-confirm-box')) byId('qr-confirm-box').hidden = true;
       byId('qr-submit-err').hidden = true;
       byId('qr-submit-ok').hidden = true;
       byId('qi-err').hidden = true;
@@ -643,10 +705,10 @@
           payload.lng = shot.gps.lng;
           payload.akurasi = shot.gps.akurasi;
         }
+        const prevLookup = activeLookup;
         const res = await Api.post('qr.absen', payload);
         await lookupQr(activeQrCode);
-        byId('qr-submit-ok').textContent = res.pesan || 'Presensi berhasil dicatat.';
-        byId('qr-submit-ok').hidden = false;
+        showConfirmScreen(res.data || {}, prevLookup);
       } catch (err) {
         if (err.message !== 'dibatalkan') {
           errEl.textContent = err.message || 'Gagal menyimpan absen.';
