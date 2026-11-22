@@ -146,6 +146,66 @@ $today = date('Y-m-d');
 $axelAdm = e2eReq("{$base}/backend/api.php?action=axel.dataset&dari={$today}&sampai={$today}&mode=wfh", $ckAdm);
 check(count($axelAdm['json']['data'] ?? []) === 1 && str_contains((string) ($axelAdm['json']['data'][0]['kegiatan'] ?? ''), 'naskah terkirim'), 'E2E: admin axel.dataset mode=wfh returns Andi Liputan record');
 
+// Admin adds custom intern ("Anak Magang") -> gets auto QR -> lookup shows custom jabatan -> WFO check-in works -> correction & izin & rekap & org.update all work
+$addIntern = e2eReq("{$base}/backend/api.php?action=karyawan.save", $ckAdm, [
+    'nama' => 'Siti Magang',
+    'email' => 'siti.magang@ketik.com',
+    'peran' => 'karyawan',
+    'tim' => 'Magang Redaksi',
+    'jabatan' => 'Anak Magang',
+    'kata_sandi' => '',
+    'aktif' => 1,
+], $csrfAdm);
+$internId = (int) ($addIntern['json']['id'] ?? 0);
+$internQr = (string) ($addIntern['json']['kode_qr'] ?? '');
+check($addIntern['code'] === 200 && $internId > 0 && str_starts_with($internQr, 'KTK-'), 'E2E: admin adds custom Anak Magang and receives auto personal QR');
+
+$lkIntern = e2eReq("{$base}/backend/api.php?action=qr.lookup", $ckPub, ['kode_qr' => $internQr], $csrfPub);
+check(($lkIntern['json']['data']['karyawan']['jabatan'] ?? '') === 'Anak Magang' && ($lkIntern['json']['data']['karyawan']['tim'] ?? '') === 'Magang Redaksi', 'E2E: qr.lookup returns custom Anak Magang jabatan and divisi');
+
+$updOrg = e2eReq("{$base}/backend/api.php?action=org.update", $ckAdm, [
+    'nama' => 'PT Ketik Media Siber (Ketik.com)',
+    'industri' => 'media',
+    'jam_masuk' => '08:00',
+    'jam_pulang' => '17:00',
+    'toleransi_menit' => 15,
+    'hari_kerja' => [1, 2, 3, 4, 5],
+    'kode_lokasi' => 'KETIK-SBY-01',
+    'wajib_foto' => 0,
+    'wajib_barcode' => 0,
+    'lat_kantor' => -7.3119,
+    'lng_kantor' => 112.7285,
+    'radius_masuk_m' => 150,
+    'wajib_gps' => 1,
+], $csrfAdm);
+check($updOrg['code'] === 200 && (int) ($updOrg['json']['organisasi']['radius_masuk_m'] ?? 0) === 150, 'E2E: org.update saves Ketik.com GPS radius & schedule');
+
+$inWfoIntern = e2eReq("{$base}/backend/api.php?action=qr.absen", $ckPub, [
+    'kode_qr' => $internQr,
+    'mode' => 'wfo',
+    'kegiatan' => 'Bantu sunting naskah kanal Surabaya',
+    'lat' => -7.3119,
+    'lng' => 112.7285,
+    'akurasi' => 12,
+], $csrfPub);
+check($inWfoIntern['code'] === 200 && ($inWfoIntern['json']['data']['tipe'] ?? '') === 'masuk', 'E2E: Anak Magang WFO check-in inside radius succeeds');
+
+$harian = e2eReq("{$base}/backend/api.php?action=absensi.harian&tanggal={$today}", $ckAdm);
+check($harian['code'] === 200 && count($harian['json']['data'] ?? []) >= 2, 'E2E: absensi.harian returns daily attendance list');
+
+$kor = e2eReq("{$base}/backend/api.php?action=absensi.koreksi", $ckAdm, [
+    'pengguna_id' => $internId,
+    'tanggal' => $today,
+    'status' => 'hadir',
+    'jam_masuk' => '08:00',
+    'jam_pulang' => '17:00',
+    'catatan' => 'Penyesuaian jam pulang magang',
+], $csrfAdm);
+check($kor['code'] === 200, 'E2E: absensi.koreksi updates attendance record');
+
+$rekap = e2eReq("{$base}/backend/api.php?action=rekap&dari={$today}&sampai={$today}", $ckAdm);
+check($rekap['code'] === 200 && count($rekap['json']['data'] ?? []) >= 2, 'E2E: rekap returns monthly summary');
+
 $kiosk = e2eReq("{$base}/backend/api.php?action=kiosk.info");
 check($kiosk['code'] === 410, 'E2E: kiosk.info returns 410');
 

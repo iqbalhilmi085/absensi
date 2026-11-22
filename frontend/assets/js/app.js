@@ -16,7 +16,7 @@
   const byId = (id) => document.getElementById(id);
 
   const STATUS_LABEL = { hadir: 'Hadir', terlambat: 'Terlambat', izin: 'Izin', sakit: 'Sakit', alpa: 'Tidak Masuk (Alpa)' };
-  const PERAN_LABEL = { karyawan: 'Karyawan (Absen QR)', atasan: 'Redaktur / Supervisor', admin: 'Admin Ketik.com' };
+  const PERAN_LABEL = { karyawan: 'Karyawan / Jurnalis / Magang (QR)', atasan: 'Redaktur / Supervisor', admin: 'Admin Ketik.com' };
   const HARI_NAMA = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const HARI_PENDEK = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   const BLN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -1177,7 +1177,6 @@
   // ---------------- Pengaturan Kantor ----------------
   async function viewPengaturan(view) {
     const o = state.org;
-    const presets = state.presets;
     const hariBoxes = Object.entries(state.hariLabels).map(([num, label]) => {
       const on = o.hari_kerja.split(',').includes(num);
       return `<label class="day-pill"><input type="checkbox" value="${num}" ${on ? 'checked' : ''}> <span>${label}</span></label>`;
@@ -1185,10 +1184,9 @@
 
     function summaryText(orgObj) {
       const aturan = [
-        Number(orgObj.wajib_foto) ? 'Wajib Foto' : 'Foto Opsional',
-        Number(orgObj.wajib_barcode) ? 'Wajib Scan QR' : 'Tanpa Scan QR',
+        Number(orgObj.wajib_foto) ? 'Wajib Foto Selfie' : 'Foto Opsional',
         (Number(orgObj.wajib_gps) || Number(orgObj.radius_masuk_m) > 0)
-          ? (Number(orgObj.radius_masuk_m) > 0 ? `Wajib di Area Kantor (${orgObj.radius_masuk_m} m)` : 'Wajib GPS Aktif')
+          ? (Number(orgObj.radius_masuk_m) > 0 ? `WFO Area Kantor (${orgObj.radius_masuk_m} m)` : 'WFO Wajib GPS')
           : 'GPS Bebas'
       ];
       return `Jam kerja <b>${esc(orgObj.jam_masuk)} – ${esc(orgObj.jam_pulang)}</b> (toleransi <b>${orgObj.toleransi_menit} menit</b>) · ${aturan.join(' · ')}`;
@@ -1197,7 +1195,7 @@
     const curRadius = Number(o.radius_masuk_m) || 0;
 
     view.innerHTML = `
-      ${pageHead('Pengaturan Kantor', 'Atur jadwal kerja dan cara absen dengan bahasa yang sederhana')}
+      ${pageHead('Pengaturan Kantor', 'Atur jam kerja redaksi, verifikasi foto selfie, dan area GPS kantor (khusus mode WFO)')}
       <div class="stack">
         <div class="config-summary" id="o-summary">
           <span><b>Aturan Aktif Saat Ini:</b> ${summaryText(o)}</span>
@@ -1205,46 +1203,36 @@
 
         <div class="grid grid-2">
           <div class="glass card">
-            <div class="card-head"><h2>Pengaturan Kantor &amp; Aturan Absen</h2></div>
+            <div class="card-head"><h2>Pengaturan Jam &amp; Verifikasi</h2></div>
             <form class="form" id="org-form">
               <div class="config-section">
                 <div class="config-section-title"><span class="step-num">1</span> Profil &amp; Jam Kerja Kantor</div>
-                <label class="field"><span>Nama Kantor / Perusahaan</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: PT Ketik Media Siber (Ketik.com)"></label>
-                <label class="field"><span>Pilih Jenis Usaha (Isi Jam Otomatis)</span><select id="o-industri">
-                  ${Object.entries(presets).map(([k, p]) => `<option value="${k}" ${o.industri === k ? 'selected' : ''}>${esc(p.label)} (${esc(p.jam_masuk)}–${esc(p.jam_pulang)})</option>`).join('')}
-                </select></label>
+                <label class="field"><span>Nama Kantor / Media</span><input id="o-nama" value="${esc(o.nama)}" required placeholder="Contoh: PT Ketik Media Siber (Ketik.com)"></label>
                 <div class="field-row">
                   <label class="field"><span>Jam Masuk</span><input type="time" id="o-masuk" value="${esc(o.jam_masuk)}"></label>
                   <label class="field"><span>Jam Pulang</span><input type="time" id="o-pulang" value="${esc(o.jam_pulang)}"></label>
                   <label class="field"><span>Toleransi Telat (Menit)</span><input type="number" id="o-toleransi" min="0" max="180" value="${o.toleransi_menit}"></label>
                 </div>
-                <p class="muted small">Contoh: jika jam masuk 08:00 dan toleransi 15 menit, karyawan dianggap terlambat bila masuk lewat 08:15.</p>
+                <p class="muted small">Contoh: jika jam masuk 08:00 dan toleransi 15 menit, karyawan dianggap terlambat bila scan lewat 08:15.</p>
                 <div class="field"><span>Hari Kerja Aktif</span><div class="day-pills" id="o-hari-wrap">${hariBoxes}</div></div>
               </div>
 
               <div class="config-section">
-                <div class="config-section-title"><span class="step-num">2</span> Cara Karyawan Absen (Kartu QR Pribadi &amp; Verifikasi)</div>
-                <p class="muted small">Setiap karyawan memindai <b>Kartu QR Pribadi</b> di halaman depan tanpa login. Aturan radius lokasi berlaku khusus untuk mode <b>Kantor Redaksi (WFO)</b>, sedangkan tim <b>Liputan / WFH</b> tetap bisa absen dengan wajib mengisi catatan kegiatan.</p>
+                <div class="config-section-title"><span class="step-num">2</span> Verifikasi Foto &amp; Lokasi</div>
+                <p class="muted small">Karyawan melakukan <b>Scan Absensi</b> dengan QR pribadi masing-masing. Pembatasan radius kantor hanya berlaku untuk mode <b>WFO</b>, sedangkan <b>Liputan / WFH</b> wajib mengisi catatan liputan/kegiatan.</p>
                 <div class="rule-cards">
                   <label class="rule-card">
                     <input type="checkbox" id="o-foto" ${Number(o.wajib_foto) ? 'checked' : ''}>
                     <div>
                       <div class="rule-card-title">Wajib Ambil Foto Selfie</div>
-                      <div class="rule-card-desc">Karyawan harus mengambil foto wajah saat absen masuk dan pulang.</div>
-                    </div>
-                  </label>
-                  <label class="rule-card">
-                    <input type="checkbox" id="o-barcode" ${Number(o.wajib_barcode) ? 'checked' : ''}>
-                    <div>
-                      <div class="rule-card-title">Verifikasi QR Tambahan Kantor (WFO)</div>
-                      <div class="rule-card-desc">Wajibkan pindai QR lokasi kantor saat karyawan memilih mode hadir WFO.</div>
+                      <div class="rule-card-desc">Karyawan harus mengambil foto saat absen masuk dan pulang.</div>
                     </div>
                   </label>
                   <label class="rule-card">
                     <input type="checkbox" id="o-gps" ${Number(o.wajib_gps) ? 'checked' : ''}>
                     <div>
                       <div class="rule-card-title">Wajib Cek Lokasi GPS</div>
-                      <div class="rule-card-desc">Pastikan lokasi GPS aktif saat absen masuk/pulang (pembatasan radius hanya untuk WFO).</div>
+                      <div class="rule-card-desc">Pastikan lokasi GPS aktif saat absen masuk/pulang.</div>
                     </div>
                   </label>
                 </div>
@@ -1339,17 +1327,6 @@
       }
     });
 
-    byId('o-industri').addEventListener('change', (e) => {
-      const p = presets[e.target.value];
-      if (!p) return;
-      byId('o-masuk').value = p.jam_masuk;
-      byId('o-pulang').value = p.jam_pulang;
-      byId('o-toleransi').value = p.toleransi_menit;
-      const days = p.hari_kerja.split(',');
-      view.querySelectorAll('#o-hari-wrap input[type="checkbox"]').forEach((c) => (c.checked = days.includes(c.value)));
-      toast(`Jam kerja diisi otomatis sesuai jenis usaha "${p.label}"`);
-    });
-
     byId('org-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const errBox = byId('o-err');
@@ -1370,14 +1347,14 @@
       try {
         const res = await Api.post('org.update', {
           nama: byId('o-nama').value,
-          industri: byId('o-industri').value,
+          industri: o.industri || 'media',
           jam_masuk: byId('o-masuk').value,
           jam_pulang: byId('o-pulang').value,
           toleransi_menit: Number(byId('o-toleransi').value),
           hari_kerja: hariKerja,
           kode_lokasi: byId('o-kode').value,
           wajib_foto: byId('o-foto').checked ? 1 : 0,
-          wajib_barcode: byId('o-barcode').checked ? 1 : 0,
+          wajib_barcode: 0,
           lat_kantor: latVal,
           lng_kantor: lngVal,
           radius_masuk_m: radiusVal,
@@ -1673,15 +1650,16 @@
         <label class="field"><span>Nama Lengkap</span><input id="e-nama" value="${esc(u?.nama || '')}" required placeholder="Masukkan nama lengkap"></label>
         <div class="field-row">
           <label class="field"><span>Alamat Email</span><input type="email" id="e-email" value="${esc(u?.email || '')}" required placeholder="nama@ketik.com"></label>
-          <label class="field"><span>Hak Akses</span><select id="e-peran">${Object.entries(PERAN_LABEL).map(([k, v]) => `<option value="${k}" ${(u?.peran || 'karyawan') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+          <label class="field"><span>Hak Akses</span><select id="e-peran">${Object.entries(PERAN_LABEL).filter(([k]) => k !== 'atasan' || u?.peran === 'atasan').map(([k, v]) => `<option value="${k}" ${(u?.peran || 'karyawan') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
         </div>
         <div class="field-row">
-          <label class="field"><span>Divisi / Departemen</span><input id="e-tim" list="ketik-divisi-list" value="${esc(u?.tim || 'Redaksi')}" placeholder="Contoh: Redaksi / Liputan"></label>
-          <label class="field"><span>Jabatan</span><input id="e-jabatan" list="ketik-jabatan-list" value="${esc(u?.jabatan || 'Reporter / Jurnalis')}" placeholder="Contoh: Reporter / Editor"></label>
+          <label class="field"><span>Divisi / Tim (Bisa Custom)</span><input id="e-tim" list="ketik-divisi-list" value="${esc(u?.tim || '')}" placeholder="Contoh: Redaksi, Liputan, atau Magang"></label>
+          <label class="field"><span>Jabatan / Status (Bisa Custom)</span><input id="e-jabatan" list="ketik-jabatan-list" value="${esc(u?.jabatan || '')}" placeholder="Contoh: Jurnalis, Anak Magang, atau Editor"></label>
         </div>
         <datalist id="ketik-divisi-list">
           <option value="Redaksi">
           <option value="Liputan / Jurnalis">
+          <option value="Magang Redaksi">
           <option value="Editor">
           <option value="IT & Digital">
           <option value="Desain & Konten">
@@ -1689,16 +1667,16 @@
           <option value="HR & Keuangan">
         </datalist>
         <datalist id="ketik-jabatan-list">
+          <option value="Jurnalis / Reporter">
+          <option value="Anak Magang">
           <option value="Pemimpin Redaksi">
           <option value="Redaktur Pelaksana">
           <option value="Redaktur">
-          <option value="Reporter / Jurnalis">
           <option value="Editor Konten">
-          <option value="Video & Fotografer">
+          <option value="Fotografer & Videografer">
           <option value="Social Media Specialist">
           <option value="Fullstack Developer">
           <option value="HR & GA">
-          <option value="Finance">
         </datalist>
         <label class="field" id="e-sandi-wrap">
           <span id="e-sandi-label">Kata Sandi Login ${edit ? '(Kosongkan jika tidak ingin mengganti)' : '(Khusus Admin)'}</span>

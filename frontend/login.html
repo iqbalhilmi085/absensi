@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Presensi Redaksi &amp; Portal Admin · Ketik.com</title>
+<title>Scan Absensi · Ketik.com</title>
 <link rel="icon" href="assets/img/ketik-icon.png" type="image/png">
 <script>
   document.documentElement.dataset.theme =
@@ -20,7 +20,7 @@
         <img src="assets/img/ketik-logo.png" alt="Ketik.com — Media Kolaborasi Indonesia">
       </div>
       <div class="ketik-header-meta">
-        <strong>Portal Presensi Redaksi &amp; Liputan</strong>
+        <strong>Ketik.com</strong>
         <span class="tabular" id="portal-clock">PT Ketik Media Siber · Surabaya</span>
       </div>
     </div>
@@ -31,14 +31,14 @@
       <div class="ketik-tabs">
         <button type="button" class="ketik-tab active" id="tab-qr" data-tab="qr">
           <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3h-3M14 20h7"/></svg>
-          <span>Presensi Scan QR</span>
+          <span>Scan Absensi</span>
         </button>
         <button type="button" class="ketik-tab" id="tab-admin" data-tab="admin">
           <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <span>Login Admin</span>
         </button>
       </div>
-      <span class="ketik-nav-tag">Media Kolaborasi Indonesia</span>
+      <span class="ketik-nav-tag">Absensi Jurnalis &amp; Magang</span>
     </div>
   </nav>
 
@@ -47,11 +47,7 @@
       <div class="ketik-portal-grid">
         <div class="glass card stack">
           <div class="card-head" style="margin-bottom:4px">
-            <div>
-              <h2>1. Pindai Kartu QR Pribadi</h2>
-              <p class="muted small">Khusus karyawan redaksi &amp; reporter liputan di lapangan (tanpa login)</p>
-            </div>
-            <span class="shift-tag">QR Pribadi</span>
+            <h2>Scan Absensi</h2>
           </div>
 
           <div class="cam-wrap" id="qr-cam-box" hidden>
@@ -60,20 +56,18 @@
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-primary" id="qr-scan-start">
+            <button type="button" class="btn btn-primary btn-block" id="qr-scan-start">
               <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
-              <span>Aktifkan Kamera Scan QR</span>
+              <span>Scan Absensi</span>
             </button>
-            <button type="button" class="btn btn-secondary" id="qr-scan-stop" hidden>Hentikan Kamera</button>
+            <button type="button" class="btn btn-secondary btn-block" id="qr-scan-stop" hidden>Tutup Kamera</button>
           </div>
-          <p class="muted small" id="qr-scan-status">Klik tombol di atas untuk memindai QR Kartu Pers Anda, atau ketik kode QR di bawah.</p>
-
-          <div class="auth-divider">atau masukkan kode QR pribadi</div>
+          <p class="muted small" id="qr-scan-status">Arahkan kamera ke QR pribadi Anda atau masukkan kode QR.</p>
 
           <form id="qr-manual-form" class="form" style="gap:10px">
             <div style="display:flex;gap:8px">
-              <input type="text" id="qr-manual-code" placeholder="Contoh: KTK-XXXX..." autocomplete="off">
-              <button type="submit" class="btn btn-secondary" id="qr-lookup-btn">Cek QR</button>
+              <input type="text" id="qr-manual-code" placeholder="Masukkan kode QR pribadi…" autocomplete="off">
+              <button type="submit" class="btn btn-secondary" id="qr-lookup-btn">Cek</button>
             </div>
           </form>
 
@@ -82,17 +76,12 @@
 
         <div class="glass card stack" id="qr-action-card">
           <div class="card-head" style="margin-bottom:4px">
-            <div>
-              <h2>2. Konfirmasi Mode &amp; Presensi</h2>
-              <p class="muted small">Identitas karyawan akan muncul otomatis setelah QR valid</p>
-            </div>
+            <h2>Konfirmasi Presensi</h2>
           </div>
 
           <div id="qr-placeholder" class="activity-box">
-            <strong>Menunggu Scan QR Pribadi</strong>
-            <p class="muted small" style="margin-top:4px">
-              Scan QR pribadi Anda di sebelah kiri untuk memilih mode <b>Kantor Redaksi (WFO)</b> atau <b>Liputan Lapangan / WFH</b>, lalu ambil foto bukti &amp; kirim absen.
-            </p>
+            <strong>Menunggu Scan Absensi</strong>
+            <p class="muted small" style="margin-top:4px">Scan QR pribadi Anda untuk memilih Kantor Redaksi (WFO) atau Liputan / WFH.</p>
           </div>
 
           <div id="qr-emp-panel" class="stack" hidden>
