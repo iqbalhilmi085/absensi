@@ -81,8 +81,8 @@ function route(string $action, string $method): void
 
         case 'karyawan.save':
             $user = require_role(['admin']);
-            $id = save_karyawan($user, input_json());
-            json_response(['ok' => true, 'id' => $id]);
+            $saved = save_karyawan($user, input_json());
+            json_response(['ok' => true, 'id' => $saved['id'], 'kode_qr' => $saved['kode_qr']]);
 
         case 'karyawan.toggle':
             $user = require_role(['admin']);
@@ -477,28 +477,31 @@ function list_tim(int $orgId): array
     return array_column($stmt->fetchAll(), 'tim');
 }
 
-function sync_karyawan_qr_row(PDO $pdo, int $orgId, int $penggunaId, string $nama, string $peran, string $tim, string $jabatan, int $aktif, string $now): void
+function sync_karyawan_qr_row(PDO $pdo, int $orgId, int $penggunaId, string $nama, string $peran, string $tim, string $jabatan, int $aktif, string $now): ?string
 {
-    $find = $pdo->prepare('SELECT id FROM karyawan WHERE legacy_pengguna_id = ?');
+    $find = $pdo->prepare('SELECT id, kode_qr FROM karyawan WHERE legacy_pengguna_id = ?');
     $find->execute([$penggunaId]);
-    $existingId = $find->fetchColumn();
+    $existing = $find->fetch();
+    $existingId = $existing ? (int) $existing['id'] : 0;
     if ($peran !== 'karyawan') {
-        if ($existingId) {
-            $pdo->prepare('UPDATE karyawan SET aktif = 0 WHERE id = ?')->execute([(int) $existingId]);
+        if ($existingId > 0) {
+            $pdo->prepare('UPDATE karyawan SET aktif = 0 WHERE id = ?')->execute([$existingId]);
         }
-        return;
+        return null;
     }
-    if ($existingId) {
-        $pdo->prepare('UPDATE karyawan SET nama = ?, tim = ?, jabatan = ?, aktif = ? WHERE id = ?')
-            ->execute([$nama, $tim, $jabatan, $aktif, (int) $existingId]);
-    } else {
-        $kodeQr = generate_personal_qr($pdo);
-        $pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-            ->execute([$orgId, $nama, $kodeQr, $aktif, $tim, $jabatan, $penggunaId, $now]);
+    if ($existingId > 0) {
+        $kodeQr = !empty($existing['kode_qr']) ? (string) $existing['kode_qr'] : generate_personal_qr($pdo);
+        $pdo->prepare('UPDATE karyawan SET nama = ?, kode_qr = ?, tim = ?, jabatan = ?, aktif = ? WHERE id = ?')
+            ->execute([$nama, $kodeQr, $tim, $jabatan, $aktif, $existingId]);
+        return $kodeQr;
     }
+    $kodeQr = generate_personal_qr($pdo);
+    $pdo->prepare('INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$orgId, $nama, $kodeQr, $aktif, $tim, $jabatan, $penggunaId, $now]);
+    return $kodeQr;
 }
 
-function save_karyawan(array $actor, array $data): int
+function save_karyawan(array $actor, array $data): array
 {
     $nama = clean_text($data['nama'] ?? '', 150);
     $email = strtolower(trim((string) ($data['email'] ?? '')));
@@ -542,9 +545,9 @@ function save_karyawan(array $actor, array $data): int
             $stmt = $pdo->prepare('UPDATE pengguna SET nama=?, email=?, peran=?, tim=?, jabatan=?, aktif=? WHERE id=? AND organisasi_id=?');
             $stmt->execute([$nama, $email, $peran, $tim, $jabatan, $aktif, $id, $orgId]);
         }
-        sync_karyawan_qr_row($pdo, $orgId, $id, $nama, $peran, $tim, $jabatan, $aktif, $now);
+        $kodeQr = sync_karyawan_qr_row($pdo, $orgId, $id, $nama, $peran, $tim, $jabatan, $aktif, $now);
         write_audit((int) $actor['id'], $orgId, 'update_karyawan', $email);
-        return $id;
+        return ['id' => $id, 'kode_qr' => $kodeQr];
     }
 
     if ($peran === 'admin') {
@@ -561,9 +564,9 @@ function save_karyawan(array $actor, array $data): int
     $stmt = $pdo->prepare('INSERT INTO pengguna (organisasi_id, nama, email, kata_sandi, peran, tim, jabatan, aktif, dibuat_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([$orgId, $nama, $email, password_hash($plainPass, PASSWORD_DEFAULT), $peran, $tim, $jabatan, $aktif, $now]);
     $newId = (int) $pdo->lastInsertId();
-    sync_karyawan_qr_row($pdo, $orgId, $newId, $nama, $peran, $tim, $jabatan, $aktif, $now);
+    $kodeQr = sync_karyawan_qr_row($pdo, $orgId, $newId, $nama, $peran, $tim, $jabatan, $aktif, $now);
     write_audit((int) $actor['id'], $orgId, 'tambah_karyawan', $email);
-    return $newId;
+    return ['id' => $newId, 'kode_qr' => $kodeQr];
 }
 
 function toggle_karyawan(array $actor): void

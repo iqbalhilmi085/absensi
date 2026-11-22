@@ -1704,18 +1704,50 @@
           <span id="e-sandi-label">Kata Sandi Login ${edit ? '(Kosongkan jika tidak ingin mengganti)' : '(Khusus Admin)'}</span>
           <input type="password" id="e-sandi" placeholder="Minimal 8 karakter untuk Admin">
         </label>
+        <div id="e-qr-box" class="config-section" style="gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span class="small" style="font-weight:700;color:var(--text)">QR Pribadi Karyawan</span>
+            <span class="shift-tag">Otomatis</span>
+          </div>
+          ${edit && u?.kode_qr ? `
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div class="qr-holder" id="e-qr-mini-svg" style="padding:6px"></div>
+              <div style="min-width:0;display:grid;gap:6px">
+                <span class="qr-code-pill">${esc(u.kode_qr)}</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="e-open-qr" style="width:fit-content">${ico('qr', 14)} Kirim / Cetak Kartu QR</button>
+              </div>
+            </div>
+          ` : '<p class="muted small">Kode &amp; Kartu QR pribadi unik (<code>KTK-...</code>) otomatis dibuat begitu data disimpan, lalu langsung muncul untuk dikirim ke karyawan.</p>'}
+        </div>
         <label style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="e-aktif" ${!edit || Number(u.aktif) ? 'checked' : ''}> <span>Karyawan Masih Aktif Bekerja</span></label>
         <div class="alert alert-error" id="e-err" hidden></div>
         <div style="display:flex;justify-content:flex-end;gap:10px">
           <button class="btn btn-secondary" type="button" data-close-btn>Batal</button>
-          <button class="btn btn-primary" type="button" id="e-save">Simpan</button>
+          <button class="btn btn-primary" type="button" id="e-save">${!edit ? 'Simpan &amp; Munculkan QR' : 'Simpan Perubahan'}</button>
         </div>
       </div>`);
     m.$('[data-close]').addEventListener('click', m.close);
     m.$('[data-close-btn]').addEventListener('click', m.close);
+    if (edit && u?.kode_qr && window.qrcode) {
+      const miniHolder = m.$('#e-qr-mini-svg');
+      if (miniHolder) {
+        try {
+          const qr = qrcode(0, 'M');
+          qr.addData(u.kode_qr);
+          qr.make();
+          miniHolder.innerHTML = qr.createSvgTag(2, 3);
+        } catch (e) {}
+      }
+      m.$('#e-open-qr')?.addEventListener('click', () => { m.close(); openQrCard(u, reload); });
+    }
     const syncPassField = () => {
-      const isAdm = m.$('#e-peran').value === 'admin';
+      const peranVal = m.$('#e-peran').value;
+      const isAdm = peranVal === 'admin';
       m.$('#e-sandi-wrap').hidden = !isAdm;
+      m.$('#e-qr-box').hidden = peranVal !== 'karyawan';
+      m.$('#e-save').textContent = (!edit || !u?.kode_qr) && peranVal === 'karyawan'
+        ? 'Simpan & Munculkan QR'
+        : 'Simpan Perubahan';
     };
     m.$('#e-peran').addEventListener('change', syncPassField);
     syncPassField();
@@ -1737,7 +1769,7 @@
           id: u?.id || 0,
           nama,
           email,
-          peran: m.$('#e-peran').value,
+          peran,
           tim: m.$('#e-tim').value,
           jabatan: m.$('#e-jabatan').value,
           kata_sandi: sandi,
@@ -1745,13 +1777,20 @@
         });
         m.close();
         const list = await reload();
-        if (!edit && peran === 'karyawan' && Array.isArray(list)) {
-          const created = list.find((x) => Number(x.id) === Number(res.id));
-          if (created && created.kode_qr) {
-            toast('Karyawan ditambahkan & QR pribadi otomatis dibuat');
-            openQrCard(created, reload);
-            return;
-          }
+        const qrCode = res.kode_qr || (Array.isArray(list) ? list.find((x) => Number(x.id) === Number(res.id))?.kode_qr : '') || '';
+        if (peran === 'karyawan' && qrCode && (!edit || !u?.kode_qr)) {
+          toast('Karyawan ditambahkan & QR pribadi otomatis dibuat');
+          openQrCard({
+            id: Number(res.id),
+            nama,
+            email,
+            peran,
+            tim: m.$('#e-tim').value || 'Redaksi',
+            jabatan: m.$('#e-jabatan').value || '',
+            kode_qr: qrCode,
+            aktif: m.$('#e-aktif').checked ? 1 : 0
+          }, reload);
+          return;
         }
         toast('Data karyawan berhasil disimpan');
       } catch (e) { errBox.textContent = e.message; errBox.hidden = false; }

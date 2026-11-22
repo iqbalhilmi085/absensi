@@ -165,7 +165,7 @@ $addEmp = httpReq("{$base}/backend/api.php?action=karyawan.save", $cookieAdmin, 
     'kata_sandi' => '',
     'aktif' => 1,
 ], $csrfAdmin);
-check($addEmp['code'] === 200 && !empty($addEmp['json']['id']), "Admin can add karyawan without manual password (got {$addEmp['code']})");
+check($addEmp['code'] === 200 && !empty($addEmp['json']['id']) && str_starts_with((string) ($addEmp['json']['kode_qr'] ?? ''), 'KTK-'), "Admin can add karyawan without manual password and receives kode_qr immediately (got {$addEmp['code']})");
 
 $listEmp = httpReq("{$base}/backend/api.php?action=karyawan.list", $cookieAdmin);
 $dinaRow = array_values(array_filter($listEmp['json']['data'] ?? [], fn($r) => $r['email'] === 'dina@ketik.com'))[0] ?? null;

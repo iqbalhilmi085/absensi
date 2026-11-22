@@ -50,6 +50,7 @@ check(is_file(__DIR__ . '/../frontend/assets/img/ketik-logo.png'), 'ketik-logo.p
 check(is_file(__DIR__ . '/../frontend/assets/img/ketik-icon.png'), 'ketik-icon.png asset exists locally');
 check(str_contains($appJs, 'ketik-divisi-list') && str_contains($appJs, 'Redaksi'), 'app.js provides Ketik.com media division suggestions');
 check(str_contains($appJs, 'openQrCard') && str_contains($appJs, 'karyawan.rotate_qr'), 'app.js provides Personal QR Card viewer/printer & QR rotation');
+check(str_contains($appJs, 'e-qr-box') && str_contains($appJs, 'Simpan &amp; Munculkan QR') && str_contains($appJs, 'res.kode_qr'), 'app.js automatically displays generated QR card right after adding a new employee');
 check(str_contains($appJs, 'wa.me') && str_contains($appJs, 'mailto:') && str_contains($appJs, 'printAllQrCards'), 'app.js provides WhatsApp/Email sharing and batch print for Personal QR cards');
 check(str_contains($appJs, 'viewPantau') && str_contains($appJs, 'viewLaporan') && !str_contains($appJs, 'viewKmeans'), 'app.js streamlines admin menus and removes confusing K-Means view');
 check(!str_contains($appJs, "roles: ['karyawan']"), 'app.js scopes web dashboard strictly to admin role');
