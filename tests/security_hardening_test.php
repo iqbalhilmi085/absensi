@@ -229,4 +229,14 @@ foreach (['karyawan.import', 'karyawan.delete', 'karyawan.revoke_qr', 'absensi.i
 $auditUnauth = secReq("{$base}/backend/api.php?action=audit.list");
 check($auditUnauth['code'] === 401, "audit.list rejects unauthenticated GET with 401 (got {$auditUnauth['code']})");
 
+// G) Non-POST enforcement on all write endpoints + static HTML security headers + secret file block
+foreach (['org.update', 'karyawan.save', 'karyawan.toggle', 'absensi.koreksi', 'absensi.izin', 'auth.change_password', 'libur.save', 'libur.delete'] as $wAct) {
+    $gRes = secReq("{$base}/backend/api.php?action={$wAct}", $ckAdm);
+    check($gRes['code'] === 405, "Write action {$wAct} rejects GET with 405 (got {$gRes['code']})");
+}
+$secHtml = secReq("{$base}/frontend/login.html");
+check(str_contains($secHtml['headers'], 'x-frame-options: deny') && str_contains($secHtml['headers'], 'x-content-type-options: nosniff'), 'Static HTML responses emit X-Frame-Options: DENY and X-Content-Type-Options: nosniff via router');
+$secSecret = secReq("{$base}/backend/data/.app_secret");
+check($secSecret['code'] === 403, "Secret key file /.app_secret returns 403 (got {$secSecret['code']})");
+
 exit($failures > 0 ? 1 : 0);

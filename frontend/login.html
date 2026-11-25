@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Scan Absensi · Ketik.com</title>
 <link rel="icon" href="assets/img/ketik-icon.png" type="image/png">
 <script>
@@ -10,45 +10,349 @@
     localStorage.getItem('absensi-theme') || 'light';
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/app.css">
 <style>
-  .qr-profile-head {
-    display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+  :root {
+    --bg: #eef3f9;
+    --card: #ffffff;
+    --card2: #f2f6fb;
+    --line: #d9e3ef;
+    --tx: #10203a;
+    --mu: #5b6d89;
+    --pri: #0e8bcf;
+    --ok: #12975f;
+    --warn: #b7791f;
+    --bad: #d64545;
+    --hd: #ffffff;
+    --dv: #0e8bcf;
   }
-  .qr-avatar-box {
-    width: 48px; height: 48px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
-    background: var(--accent-soft); border: 2px solid var(--accent-border);
-    display: grid; place-items: center; font-weight: 700; font-size: 15px; color: var(--accent);
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0a1220; --card: #101a2e; --card2: #16233b; --line: #22324d;
+      --tx: #e8eef7; --mu: #8fa0ba; --ok: #2ecc8f; --warn: #f5b942; --bad: #ef7a7a; --hd: #0d1a2f;
+    }
   }
-  .qr-avatar-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .qr-self-tabs {
-    display: flex; gap: 6px; padding: 4px; border-radius: 11px;
-    background: var(--surface-subtle); border: 1px solid var(--panel-border);
+  html[data-theme="dark"] {
+    --bg: #0a1220; --card: #101a2e; --card2: #16233b; --line: #22324d;
+    --tx: #e8eef7; --mu: #8fa0ba; --ok: #2ecc8f; --warn: #f5b942; --bad: #ef7a7a; --hd: #0d1a2f;
   }
-  .qr-self-tab {
-    flex: 1; border: 0; background: transparent; color: var(--text-muted);
-    font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 10px;
-    border-radius: 8px; cursor: pointer; transition: .15s ease;
+  body.ketik-portal-body {
+    background: var(--bg);
+    color: var(--tx);
+    font: 500 15px/1.5 "Plus Jakarta Sans", system-ui, sans-serif;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .qr-self-tab.active {
-    background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(15,23,42,.08);
+  .ketik-header {
+    background: var(--hd);
+    border-bottom: 1px solid var(--line);
+    padding: 0;
   }
-  .qr-tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
-  .qr-hist-item {
+  .ketik-header-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .ketik-logo-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ketik-logo-link img {
+    height: 40px;
+    width: auto;
+    display: block;
+  }
+  .ketik-header-meta {
+    text-align: right;
+    font-size: 13px;
+    color: var(--mu);
+  }
+  .ketik-header-meta strong {
+    display: block;
+    color: var(--tx);
+    font-size: 15px;
+  }
+  .ketik-nav-strip {
+    background: var(--pri);
+    border-bottom: 0;
+    padding: 0;
+  }
+  .ketik-nav-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 10px 20px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-height: 0;
+  }
+  .ketik-tabs { display: flex; gap: 8px; }
+  .ketik-tab {
+    border: 0;
+    background: rgba(255, 255, 255, .18);
+    color: #ffffff;
+    padding: 9px 16px;
+    border-radius: 9px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .ketik-tab:hover { background: rgba(255, 255, 255, .28); }
+  .ketik-tab.active { background: #ffffff; color: #0b6fa6; }
+  .ketik-nav-tag {
+    margin-left: auto;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .ketik-portal-main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 24px 20px 40px;
+    width: 100%;
+    flex: 1;
+  }
+  .ketik-portal-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 820px) {
+    .ketik-portal-grid { grid-template-columns: 1fr; }
+  }
+  .portal-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: none;
+  }
+  .portal-card h2 {
+    margin: 0 0 14px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--tx);
+  }
+  .view {
+    aspect-ratio: 1 / 1;
+    border-radius: 14px;
+    background: #050b16;
+    position: relative;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    color: #7d8fab;
+    font-size: 13px;
+    text-align: center;
+    padding: 30px;
+  }
+  .view video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: none;
+  }
+  .view.live video { display: block; }
+  .view .c { position: absolute; width: 34px; height: 34px; border: 3px solid var(--pri); z-index: 2; pointer-events: none; }
+  .c.a { top: 18px; left: 18px; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+  .c.b { top: 18px; right: 18px; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+  .c.d { bottom: 18px; left: 18px; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+  .c.e { bottom: 18px; right: 18px; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+  .line {
+    position: absolute; left: 18px; right: 18px; height: 2px;
+    background: var(--pri); box-shadow: 0 0 12px var(--pri);
+    top: 18px; display: none; z-index: 2; pointer-events: none;
+  }
+  .view.live .line { display: block; animation: sw 2.2s ease-in-out infinite alternate; }
+  .view.live .hint { display: none; }
+  .hint { position: relative; z-index: 1; }
+  @keyframes sw { to { top: calc(100% - 20px); } }
+  @media (prefers-reduced-motion: reduce) { .view.live .line { animation: none; top: 50%; } }
+
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  .pbtn {
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 10px;
+    padding: 11px 14px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--tx);
+    cursor: pointer;
+    min-height: 0;
+  }
+  .pbtn.p { background: var(--pri); border-color: var(--pri); color: #ffffff; }
+  .pbtn.w { width: 100%; }
+  .pbtn:disabled { opacity: .5; cursor: not-allowed; }
+  .pbtn:focus-visible, .portal-card input:focus-visible, .portal-card select:focus-visible,
+  .portal-card textarea:focus-visible, .mode:focus-visible, .tabs button:focus-visible {
+    outline: 2px solid var(--pri);
+    outline-offset: 2px;
+  }
+  .portal-card input, .portal-card select, .portal-card textarea {
+    width: 100%;
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 11px 13px;
+    font: inherit;
+    color: var(--tx);
+  }
+  .portal-card textarea { resize: vertical; min-height: 84px; }
+  .portal-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 14px 0 6px;
+    color: var(--tx);
+  }
+
+  .banner {
+    background: var(--card2);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border-left: 4px solid var(--dv);
+  }
+  .banner b { display: block; color: var(--tx); }
+  .banner span { color: var(--mu); font-size: 13px; }
+  .emp {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--card2);
+    border: 1px solid var(--line);
+  }
+  .av {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--dv); color: #ffffff;
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 18px;
+    flex: none; overflow: hidden;
+  }
+  .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .emp .n { font-weight: 700; font-size: 16px; color: var(--tx); }
+  .emp .m { font-size: 12.5px; color: var(--mu); }
+  .pill {
+    margin-left: auto;
+    font-size: 12px; font-weight: 700;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--line); color: var(--mu); white-space: nowrap;
+  }
+  .pill.in { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .pill.out { background: color-mix(in srgb, var(--pri) 18%, transparent); color: var(--pri); }
+
+  .tabs.qr-self-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--card2);
+    border-radius: 12px;
+    padding: 4px;
+    margin: 14px 0;
+    border: 0;
+    gap: 0;
+  }
+  .tabs.qr-self-tabs button {
+    border: 0;
+    background: transparent;
+    padding: 9px;
+    border-radius: 9px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--mu);
+    cursor: pointer;
+  }
+  .tabs.qr-self-tabs button.active {
+    background: var(--card);
+    color: var(--tx);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .15);
+  }
+
+  .modes.mode-switch {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+  }
+  .mode {
+    border: 1.5px solid var(--line);
+    background: var(--card2);
+    border-radius: 12px;
+    padding: 12px 14px;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: var(--tx);
+  }
+  .mode b { display: block; font-size: 14px; }
+  .mode span { font-size: 12.5px; color: var(--mu); display: block; }
+  .mode.active {
+    border-color: var(--dv);
+    background: color-mix(in srgb, var(--dv) 12%, var(--card2));
+  }
+  .mode.active b { color: var(--dv); }
+
+  .rule {
+    font-size: 12.5px;
+    color: var(--mu);
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+  }
+  .rule::before { content: "ⓘ"; color: var(--dv); }
+  .lock { text-align: center; color: var(--mu); padding: 34px 10px; }
+  .hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .hist li {
     display: flex; justify-content: space-between; align-items: center; gap: 10px;
-    padding: 9px 11px; border-radius: 10px; border: 1px solid var(--panel-border);
-    background: var(--surface-subtle); font-size: 12.5px;
+    background: var(--card2); border-radius: 10px; padding: 11px 14px; font-size: 13.5px;
   }
-  .qr-ringkasan-strip {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
-  }
+  .hist small { display: block; color: var(--mu); }
+  .late { color: var(--warn); font-weight: 700; }
+  .early { color: var(--ok); font-weight: 700; }
+  .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .qr-ringkasan-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
   .qr-ring-box {
-    padding: 8px 10px; border-radius: 10px; background: var(--surface-subtle);
-    border: 1px solid var(--panel-border); text-align: center;
+    padding: 8px 10px; border-radius: 10px; background: var(--card2);
+    border: 1px solid var(--line); text-align: center;
   }
-  .qr-ring-box b { display: block; font-size: 16px; color: var(--text); }
-  .qr-ring-box span { font-size: 11px; color: var(--text-muted); }
+  .qr-ring-box b { display: block; font-size: 16px; color: var(--tx); }
+  .qr-ring-box span { font-size: 11px; color: var(--mu); }
+  .qr-tag-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+
+  #toast {
+    position: fixed; left: 50%;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    background: var(--tx); color: var(--bg);
+    padding: 11px 18px; border-radius: 12px;
+    font-weight: 600; font-size: 14px;
+    opacity: 0; pointer-events: none; transition: opacity .2s;
+    max-width: 90vw; z-index: 95; text-align: center;
+  }
+  #toast.show { opacity: 1; }
+  .ketik-portal-foot {
+    text-align: center;
+    color: var(--mu);
+    font-size: 12px;
+    padding: 20px;
+    background: transparent;
+    border-top: 0;
+  }
 </style>
 </head>
 <body class="ketik-portal-body">
@@ -67,176 +371,139 @@
   <nav class="ketik-nav-strip" aria-label="Navigasi Portal Ketik.com">
     <div class="ketik-nav-inner">
       <div class="ketik-tabs">
-        <button type="button" class="ketik-tab active" id="tab-qr" data-tab="qr">
-          <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3h-3M14 20h7"/></svg>
-          <span>Scan Absensi</span>
-        </button>
-        <button type="button" class="ketik-tab" id="tab-admin" data-tab="admin">
-          <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span>Login Admin</span>
-        </button>
+        <button type="button" class="ketik-tab active" id="tab-qr" data-tab="qr">Scan Absensi</button>
+        <button type="button" class="ketik-tab" id="tab-admin" data-tab="admin">Login Admin</button>
       </div>
       <span class="ketik-nav-tag">Absensi Jurnalis &amp; Magang</span>
     </div>
   </nav>
 
   <main class="ketik-portal-main">
+    <div id="qr-offline-bar" class="alert alert-error" style="margin-bottom:14px" hidden>Koneksi internet terputus. Scan kamera tetap terbuka, namun pengiriman presensi memerlukan koneksi internet.</div>
+
     <section id="panel-qr">
       <div class="ketik-portal-grid">
-        <div class="glass card stack">
-          <div class="card-head" style="margin-bottom:4px">
-            <h2>Scan Absensi</h2>
-          </div>
-
-          <div class="cam-wrap" id="qr-cam-box" hidden>
+        <section class="portal-card">
+          <h2>Scan Absensi</h2>
+          <div class="view" id="qr-cam-box">
             <video id="qr-video" playsinline muted autoplay></video>
-            <div class="scan-frame"></div>
+            <i class="c a" aria-hidden="true"></i>
+            <i class="c b" aria-hidden="true"></i>
+            <i class="c d" aria-hidden="true"></i>
+            <i class="c e" aria-hidden="true"></i>
+            <div class="line" aria-hidden="true"></div>
+            <div class="hint" id="qr-scan-status">Tekan “Scan Absensi”, lalu arahkan kamera ke QR pribadi Anda.</div>
           </div>
-
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-primary btn-block" id="qr-scan-start">
-              <svg class="ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
-              <span>Scan Absensi</span>
-            </button>
-            <button type="button" class="btn btn-secondary btn-block" id="qr-scan-stop" hidden>Tutup Kamera</button>
+          <div class="row">
+            <button type="button" class="pbtn p w" id="qr-scan-start">Scan Absensi</button>
+            <button type="button" class="pbtn w" id="qr-scan-stop">Tutup Kamera</button>
           </div>
-          <p class="muted small" id="qr-scan-status">Arahkan kamera ke QR pribadi Anda atau masukkan kode QR.</p>
-
-          <form id="qr-manual-form" class="form" style="gap:10px">
-            <div style="display:flex;gap:8px">
-              <input type="text" id="qr-manual-code" placeholder="Masukkan kode QR pribadi…" autocomplete="off">
-              <button type="submit" class="btn btn-secondary" id="qr-lookup-btn">Cek</button>
+          <form id="qr-manual-form">
+            <label class="portal-label" for="qr-manual-code">Atau masukkan kode QR pribadi</label>
+            <div class="row" style="margin-top:0">
+              <input id="qr-manual-code" placeholder="Masukkan kode QR pribadi…" autocomplete="off">
+              <button type="submit" class="pbtn" id="qr-lookup-btn">Cek</button>
             </div>
           </form>
+          <div id="qr-lookup-err" class="alert alert-error" style="margin-top:10px" hidden></div>
+        </section>
 
-          <div id="qr-lookup-err" class="alert alert-error" hidden></div>
-        </div>
-
-        <div class="glass card stack" id="qr-action-card">
-          <div class="card-head" style="margin-bottom:4px">
-            <h2>Konfirmasi Presensi</h2>
+        <section class="portal-card" id="qr-action-card">
+          <h2>Konfirmasi Presensi</h2>
+          <div class="banner" id="qr-banner">
+            <b>Menunggu scan absensi</b>
+            <span>Scan QR pribadi Anda. Mode kerja, shift, dan isian akan menyesuaikan divisi Anda.</span>
           </div>
 
-          <div id="qr-placeholder" class="activity-box">
-            <strong>Menunggu Scan Absensi</strong>
-            <p class="muted small" style="margin-top:4px">Scan QR pribadi Anda untuk memilih Kantor Redaksi (WFO) atau Liputan / WFH.</p>
+          <div class="emp" id="qr-emp">
+            <div class="av" id="qr-emp-avatar">–</div>
+            <div style="min-width:0">
+              <div class="n" id="qr-emp-nama">Belum ada pengguna</div>
+              <div class="m" id="qr-emp-meta">–</div>
+              <div class="qr-tag-row" id="qr-emp-tags"></div>
+            </div>
+            <span class="pill" id="qr-emp-badge">Belum absen</span>
           </div>
 
-          <div id="qr-emp-panel" class="stack" hidden>
-            <div class="config-summary" style="justify-content:space-between;align-items:flex-start;gap:10px">
-              <div class="qr-profile-head">
-                <div class="qr-avatar-box" id="qr-emp-avatar">—</div>
-                <div style="min-width:0">
-                  <div style="font-weight:700;font-size:15px;color:var(--text)" id="qr-emp-nama">—</div>
-                  <div class="small muted" id="qr-emp-meta">—</div>
-                  <div class="qr-tag-row" id="qr-emp-tags"></div>
-                </div>
-              </div>
-              <span class="badge badge-netral" id="qr-emp-badge">Belum Absen</span>
-            </div>
+          <div class="tabs qr-self-tabs" role="tablist" aria-label="Menu Anggota">
+            <button type="button" class="active" data-qtab="absen">Absen</button>
+            <button type="button" data-qtab="riwayat">Riwayat saya</button>
+            <button type="button" data-qtab="izin">Ajukan izin</button>
+          </div>
 
-            <div class="qr-self-tabs" role="tablist" aria-label="Menu Anggota">
-              <button type="button" class="qr-self-tab active" data-qtab="absen">Absen</button>
-              <button type="button" class="qr-self-tab" data-qtab="riwayat">Riwayat Saya</button>
-              <button type="button" class="qr-self-tab" data-qtab="izin">Ajukan Izin</button>
-            </div>
+          <div id="qr-tab-absen">
+            <div class="lock" id="qr-placeholder">Scan QR dulu untuk membuka form absen.</div>
 
-            <div id="qr-tab-absen" class="stack">
+            <div id="qr-emp-panel" hidden>
               <div id="qr-confirm-box" class="qr-confirm-wrap" hidden></div>
 
-              <div id="qr-digital-card" class="qr-digital-mini" hidden>
+              <div id="qr-digital-card" class="qr-digital-mini" style="margin-bottom:12px" hidden>
                 <div class="qr-holder" id="qr-digital-svg" style="padding:8px"></div>
                 <div style="min-width:0">
-                  <div style="font-weight:700;font-size:13px;color:var(--text)">Kartu QR Pribadi Anda</div>
+                  <div style="font-weight:700;font-size:13px;color:var(--tx)">Kartu QR Pribadi Anda</div>
                   <div class="small muted">Simpan atau screenshot QR ini untuk absen berikutnya.</div>
                   <div class="qr-code-pill" id="qr-digital-code" style="margin-top:6px">—</div>
                 </div>
               </div>
 
-              <div id="qr-done-box" class="alert alert-ok" hidden></div>
+              <div id="qr-done-box" class="alert alert-ok" style="margin-bottom:12px" hidden></div>
 
-              <div id="qr-form-box" class="form">
-                <div class="field" id="qr-mode-wrap">
-                  <span>Mode Kerja Saat Ini</span>
-                  <div class="mode-switch" id="qr-mode-switch">
-                    <button type="button" class="mode-opt active" data-mode="wfo">
-                      <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
-                      <div>
-                        <span class="mode-opt-title">Kantor Redaksi (WFO)</span>
-                        <span class="mode-opt-desc">Di kantor Ketik.com</span>
-                      </div>
-                    </button>
-                    <button type="button" class="mode-opt" data-mode="wfh">
-                      <svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-                      <div>
-                        <span class="mode-opt-title">Liputan / WFH</span>
-                        <span class="mode-opt-desc">Di lapangan + kegiatan</span>
-                      </div>
-                    </button>
-                  </div>
-                  <div class="muted small" id="qr-mode-hint" style="margin-top:4px"></div>
+              <div id="qr-form-box">
+                <div id="qr-mode-wrap">
+                  <label class="portal-label" style="margin-top:0">Mode kerja saat ini</label>
+                  <div class="modes mode-switch" id="qr-mode-switch"></div>
                 </div>
 
-                <label class="field" id="qr-shift-wrap">
-                  <span>Shift Kerja Hari Ini</span>
+                <div id="qr-shift-wrap">
+                  <label class="portal-label" for="qr-shift">Shift kerja hari ini</label>
                   <select id="qr-shift">
                     <option value="">Sesuai Jadwal Divisi</option>
                   </select>
-                </label>
+                </div>
 
-                <label class="field">
-                  <span id="qr-keg-label">Catatan Liputan / Kegiatan</span>
-                  <textarea id="qr-kegiatan" placeholder="Contoh: Liputan konferensi pers di Balai Kota dan kirim berita ke redaktur"></textarea>
-                </label>
+                <label class="portal-label" for="qr-kegiatan" id="qr-keg-label">Catatan</label>
+                <textarea id="qr-kegiatan"></textarea>
 
-                <div id="qr-submit-err" class="alert alert-error" hidden></div>
-                <div id="qr-submit-ok" class="alert alert-ok" hidden></div>
+                <div class="rule" id="qr-rule-note"></div>
+                <div id="qr-submit-err" class="alert alert-error" style="margin-top:10px" hidden></div>
+                <div id="qr-submit-ok" class="alert alert-ok" style="margin-top:10px" hidden></div>
 
-                <button type="button" class="btn btn-primary btn-lg btn-block" id="qr-submit-btn">
-                  Ambil Foto &amp; Kirim Absen
-                </button>
+                <button type="button" class="pbtn p w" id="qr-submit-btn" style="margin-top:16px">Ambil foto &amp; kirim absen</button>
               </div>
             </div>
+          </div>
 
-            <div id="qr-tab-riwayat" class="stack" hidden>
-              <div id="qr-riwayat-summary" class="qr-ringkasan-strip"></div>
-              <div id="qr-riwayat-list" class="stack" style="gap:8px;max-height:280px;overflow:auto">
-                <p class="muted small">Memuat riwayat kehadiran pribadi…</p>
-              </div>
-            </div>
+          <div id="qr-tab-riwayat" hidden>
+            <div id="qr-riwayat-summary" class="qr-ringkasan-strip" hidden></div>
+            <ul class="hist" id="qr-riwayat-list">
+              <li><div>Belum ada riwayat hari ini.</div></li>
+            </ul>
+          </div>
 
-            <form id="qr-tab-izin" class="form" hidden>
-              <label class="field">
-                <span>Jenis Pengajuan</span>
-                <select id="qi-jenis">
-                  <option value="izin">Izin (Keperluan / Cuti)</option>
-                  <option value="sakit">Sakit</option>
-                  <option value="dinas_luar">Dinas Luar / Liputan Khusus</option>
-                </select>
-              </label>
-              <div class="field-row">
-                <label class="field"><span>Mulai Tanggal</span><input type="date" id="qi-mulai" required></label>
-                <label class="field"><span>Sampai Tanggal</span><input type="date" id="qi-sampai" required></label>
+          <div id="qr-tab-izin-wrap" hidden>
+            <div class="lock" id="qr-izin-lock">Scan QR dulu untuk mengajukan izin.</div>
+            <form id="qr-tab-izin" hidden>
+              <label class="portal-label" for="qi-jenis" style="margin-top:0">Jenis pengajuan</label>
+              <select id="qi-jenis"></select>
+              <div class="g2">
+                <div><label class="portal-label" for="qi-mulai">Mulai tanggal</label><input type="date" id="qi-mulai" required></div>
+                <div><label class="portal-label" for="qi-sampai">Sampai tanggal</label><input type="date" id="qi-sampai" required></div>
               </div>
-              <label class="field">
-                <span>Alasan / Keterangan</span>
-                <textarea id="qi-catatan" required placeholder="Tuliskan alasan izin, sakit, atau surat tugas dinas luar…"></textarea>
-              </label>
-              <label class="field">
-                <span>Lampiran Surat / Bukti Foto (Opsional)</span>
-                <input type="file" id="qi-foto" accept="image/png,image/jpeg,image/webp">
-              </label>
-              <div id="qi-err" class="alert alert-error" hidden></div>
-              <div id="qi-ok" class="alert alert-ok" hidden></div>
-              <button type="submit" class="btn btn-primary btn-block" id="qi-submit">Kirim Pengajuan ke Admin</button>
+              <label class="portal-label" for="qi-catatan">Alasan / keterangan</label>
+              <textarea id="qi-catatan" required placeholder="Tuliskan alasan izin, sakit, atau surat tugas dinas luar…"></textarea>
+              <label class="portal-label" for="qi-foto">Lampiran surat / bukti foto (opsional)</label>
+              <input type="file" id="qi-foto" accept="image/png,image/jpeg,image/webp">
+              <div id="qi-err" class="alert alert-error" style="margin-top:10px" hidden></div>
+              <div id="qi-ok" class="alert alert-ok" style="margin-top:10px" hidden></div>
+              <button type="submit" class="pbtn p w" id="qi-submit" style="margin-top:16px">Kirim pengajuan ke admin</button>
             </form>
           </div>
-        </div>
+        </section>
       </div>
     </section>
 
     <section id="panel-admin" class="ketik-admin-wrap" hidden>
-      <div class="glass card stack" style="padding:28px">
+      <div class="portal-card stack" style="padding:28px">
         <div class="brand">
           <span class="brand-icon-box" aria-hidden="true">
             <img src="assets/img/ketik-icon.png" alt="Ikon Ketik.com">
@@ -267,7 +534,7 @@
         </form>
 
         <div class="auth-foot-note">
-          Website dashboard hanya dapat diakses oleh Admin. Karyawan redaksi &amp; liputan melakukan presensi melalui tab <b>Presensi Scan QR</b>.
+          Website dashboard hanya dapat diakses oleh Admin. Karyawan redaksi &amp; liputan melakukan presensi melalui tab <b>Scan Absensi</b>.
         </div>
       </div>
     </section>
@@ -278,6 +545,7 @@
   </footer>
 
   <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="assets/vendor/jsQR.js"></script>
   <script src="assets/vendor/qrcode.js"></script>
@@ -286,27 +554,35 @@
   <script src="assets/js/scanner.js"></script>
   <script>
     const byId = (id) => document.getElementById(id);
+    const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-    // Jam real-time di header
+    let toastTimer = null;
+    function toast(msg) {
+      const el = byId('toast');
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+    }
+
     function tickClock() {
-      const n = new Date();
-      const hari = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][n.getDay()];
-      const bln = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][n.getMonth()];
-      const jam = `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}:${String(n.getSeconds()).padStart(2, '0')}`;
-      byId('portal-clock').textContent = `${hari}, ${n.getDate()} ${bln} ${n.getFullYear()} · ${jam} WIB`;
+      byId('portal-clock').textContent = new Date().toLocaleString('id-ID', {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false, timeZone: 'Asia/Jakarta'
+      }).replace(/\./g, ':') + ' WIB';
     }
     tickClock();
     setInterval(tickClock, 1000);
 
-    // Tab switcher (Scan QR vs Login Admin)
+    // Tab switcher (Scan Absensi vs Login Admin)
     let qrStream = null;
     let qrRaf = null;
     function stopInlineScanner() {
       if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = null; }
       if (qrStream) { qrStream.getTracks().forEach((t) => t.stop()); qrStream = null; }
-      byId('qr-cam-box').hidden = true;
-      byId('qr-scan-start').hidden = false;
-      byId('qr-scan-stop').hidden = true;
+      byId('qr-cam-box').classList.remove('live');
     }
 
     function switchTab(tab) {
@@ -320,46 +596,107 @@
     byId('tab-qr').addEventListener('click', () => switchTab('qr'));
     byId('tab-admin').addEventListener('click', () => switchTab('admin'));
 
-    // Password toggle & Admin Login
+    // Password toggle & Login Admin
     const form = byId('login-form');
     const alertBox = byId('alert');
-    const btn = byId('login-btn');
+    const loginBtn = byId('login-btn');
     const passInput = byId('login-pass');
     byId('toggle-pass').addEventListener('click', () => {
-      const show = passInput.type === 'password';
-      passInput.type = show ? 'text' : 'password';
+      passInput.type = passInput.type === 'password' ? 'text' : 'password';
     });
-
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       alertBox.hidden = true;
-      btn.disabled = true;
-      btn.textContent = 'Memverifikasi…';
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Memverifikasi…';
       try {
-        await Api.post('auth.login', {
-          email: form.email.value,
-          kata_sandi: form.kata_sandi.value
-        });
+        await Api.post('auth.login', { email: form.email.value, kata_sandi: form.kata_sandi.value });
         location.href = 'index.html';
       } catch (err) {
         alertBox.textContent = err.message || 'Gagal masuk. Hanya Admin yang dapat mengakses website ini.';
         alertBox.hidden = false;
-        btn.disabled = false;
-        btn.textContent = 'Masuk sebagai Admin';
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Masuk sebagai Admin';
       }
     });
 
-    // Presensi QR Pribadi Redaksi & Liputan
+    // Konfigurasi tampilan adaptif per divisi (terhubung ke data backend)
+    const DIV = {
+      redaksi: {
+        n: 'Redaksi · Jurnalis', c: '#0e8bcf',
+        modes: [
+          ['wfo', 'Kantor redaksi (WFO)', 'Di kantor Ketik.com', 'wfo'],
+          ['lap', 'Liputan lapangan', 'Di lokasi + wajib catatan', 'wfh']
+        ],
+        nl: 'Catatan liputan / kegiatan',
+        ph: 'Contoh: Liputan konferensi pers di Balai Kota dan kirim berita ke redaktur',
+        need: ['lap'],
+        rule: 'Mode liputan wajib mengisi lokasi dan agenda. Berita dikirim ke redaktur sebelum shift berakhir.',
+        izin: [['izin', 'Izin (keperluan / cuti)'], ['sakit', 'Sakit'], ['dinas_luar', 'Dinas luar (surat tugas)']]
+      },
+      fotovideo: {
+        n: 'Foto & Video', c: '#8a5cf6',
+        modes: [
+          ['wfo', 'Kantor / studio', 'Di kantor Ketik.com', 'wfo'],
+          ['lap', 'Shooting lapangan', 'Liputan foto / video', 'wfh'],
+          ['edit', 'Editing remote', 'Edit dari luar kantor', 'wfh']
+        ],
+        nl: 'Penugasan / lokasi shooting',
+        ph: 'Contoh: Dokumentasi pelantikan wali kota, bawa kamera + drone',
+        need: ['lap', 'edit'],
+        rule: 'Shooting lapangan wajib mencantumkan lokasi dan perangkat yang dibawa. Hasil diunggah ke drive divisi.',
+        izin: [['izin', 'Izin (keperluan / cuti)'], ['sakit', 'Sakit'], ['dinas_luar', 'Dinas luar (surat tugas)']]
+      },
+      desain: {
+        n: 'Desain & Kreatif', c: '#e0783a',
+        modes: [
+          ['wfo', 'Kantor (WFO)', 'Di kantor Ketik.com', 'wfo'],
+          ['wfh', 'Kerja dari rumah (WFH)', 'Wajib target harian', 'wfh']
+        ],
+        nl: 'Target pekerjaan hari ini',
+        ph: 'Contoh: Finalisasi infografis pemilu dan 3 thumbnail YouTube',
+        need: ['wfh'],
+        rule: 'WFH wajib mengisi target harian. Hasil kerja dilaporkan ke koordinator desain sore hari.',
+        izin: [['izin', 'Izin (keperluan / cuti)'], ['sakit', 'Sakit']]
+      },
+      magang: {
+        n: 'Magang', c: '#12a58a',
+        modes: [
+          ['wfo', 'Kantor (WFO)', 'Di kantor Ketik.com', 'wfo'],
+          ['wfh', 'Tugas mentor (WFH)', 'Hanya atas izin mentor', 'wfh']
+        ],
+        nl: 'Tugas hari ini / nama mentor',
+        ph: 'Contoh: Membantu transkrip wawancara, mentor: Mas Rizky',
+        need: ['wfo', 'wfh'],
+        rule: 'Peserta magang wajib menulis tugas dan nama mentor di setiap absen.',
+        izin: [['izin', 'Izin (keperluan)'], ['sakit', 'Sakit']]
+      }
+    };
+
+    function resolveDivKey(karyawan) {
+      const tim = String(karyawan?.tim || '').toLowerCase();
+      const jab = String(karyawan?.jabatan || '').toLowerCase();
+      const tipe = String(karyawan?.tipe || '').toLowerCase();
+      if (tipe === 'magang' || tim.includes('magang') || jab.includes('magang')) return 'magang';
+      if (tim.includes('foto') || tim.includes('video') || jab.includes('video') || jab.includes('foto')) return 'fotovideo';
+      if (tim.includes('desain') || tim.includes('kreatif') || jab.includes('desain')) return 'desain';
+      return 'redaksi';
+    }
+
     let activeQrCode = '';
     let activeLookup = null;
-    let selectedMode = 'wfo';
+    let activeDiv = DIV.redaksi;
+    let activeColor = DIV.redaksi.c;
+    let selectedModeKey = 'wfo';
+    let selectedApiMode = 'wfo';
     let activeQTab = 'absen';
+    let showDigitalCard = false;
 
-    const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     function localTodayISO() {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
+
     function resizeImageFile(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -388,7 +725,7 @@
       document.querySelectorAll('[data-qtab]').forEach((b) => b.classList.toggle('active', b.dataset.qtab === tab));
       byId('qr-tab-absen').hidden = tab !== 'absen';
       byId('qr-tab-riwayat').hidden = tab !== 'riwayat';
-      byId('qr-tab-izin').hidden = tab !== 'izin';
+      byId('qr-tab-izin-wrap').hidden = tab !== 'izin';
       if (tab === 'absen' && byId('qr-confirm-box')) {
         if (!byId('qr-confirm-box').hidden && activeLookup?.hari_ini?.state !== 'done') {
           byId('qr-confirm-box').hidden = true;
@@ -429,16 +766,16 @@
         <h2 style="font-size:21px;margin:0">${escHtml(heading)}</h2>
         <div class="qr-confirm-card">
           <div class="qr-confirm-avatar">${avatarHtml}</div>
-          <div style="font-size:19px;font-weight:700;color:var(--text)">${escHtml(k.nama || 'Anggota')}</div>
+          <div style="font-size:19px;font-weight:700;color:var(--tx)">${escHtml(k.nama || 'Anggota')}</div>
           <div class="muted small">${escHtml(k.tim || 'Redaksi')} · ${k.tipe === 'magang' ? 'Magang' : 'Karyawan'}</div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text-secondary)">${escHtml(shiftLabel)} · ${escHtml(jamJadwal)}</div>
+          <div style="font-size:13.5px;font-weight:600;color:var(--mu)">${escHtml(shiftLabel)} · ${escHtml(jamJadwal)}</div>
           <div class="qr-confirm-time">${escHtml(jamTampil)}</div>
           <span class="badge ${badgeCls}">${escHtml(badgeTxt)}</span>
           ${isWarn ? '<div class="muted small" style="margin-top:2px">Absen tetap tercatat dan akan ditinjau Admin.</div>' : ''}
         </div>
-        <button type="button" class="btn btn-primary btn-block" id="qc-go-riwayat" style="min-height:44px">Riwayat saya</button>
-        <button type="button" class="btn btn-secondary btn-block" id="qc-go-izin" style="min-height:44px">${isWarn ? 'Ajukan izin / klarifikasi' : 'Ajukan izin'}</button>
-        ${h.state !== 'done' ? '<button type="button" class="btn btn-ghost btn-block" id="qc-back">Kembali ke Form Absen</button>' : ''}`;
+        <button type="button" class="pbtn p w" id="qc-go-riwayat">Riwayat saya</button>
+        <button type="button" class="pbtn w" id="qc-go-izin">${isWarn ? 'Ajukan izin / klarifikasi' : 'Ajukan izin'}</button>
+        ${h.state !== 'done' ? '<button type="button" class="pbtn w" id="qc-back">Kembali ke Form Absen</button>' : ''}`;
 
       byId('qr-form-box').hidden = true;
       byId('qr-done-box').hidden = true;
@@ -450,7 +787,7 @@
       byId('qc-back')?.addEventListener('click', () => {
         box.hidden = true;
         if (activeLookup?.hari_ini?.state !== 'done') byId('qr-form-box').hidden = false;
-        byId('qr-digital-card').hidden = false;
+        if (showDigitalCard) byId('qr-digital-card').hidden = false;
       });
     }
 
@@ -458,11 +795,12 @@
       if (!activeQrCode) return;
       const listEl = byId('qr-riwayat-list');
       const sumEl = byId('qr-riwayat-summary');
-      listEl.innerHTML = '<p class="muted small">Memuat riwayat kehadiran…</p>';
+      listEl.innerHTML = '<li><div>Memuat riwayat kehadiran…</div></li>';
       try {
         const res = await Api.post('qr.riwayat', { kode_qr: activeQrCode });
         const d = res.data || {};
         const r = d.ringkasan || {};
+        sumEl.hidden = false;
         sumEl.innerHTML = `
           <div class="qr-ring-box"><b>${r.hadir || 0}</b><span>Tepat Waktu</span></div>
           <div class="qr-ring-box"><b>${r.terlambat || 0}</b><span>Terlambat</span></div>
@@ -471,41 +809,49 @@
         const labelStatus = { hadir: 'Tepat Waktu', terlambat: 'Terlambat', izin: 'Izin', sakit: 'Sakit', alpa: 'Alpa' };
         listEl.innerHTML = rows.length ? rows.map((x) => {
           const apv = x.approval_status && x.approval_status !== 'disetujui' ? ` (${escHtml(x.approval_status)})` : '';
-          return `<div class="qr-hist-item">
+          return `<li>
             <div>
-              <div style="font-weight:700">${escHtml(x.tanggal)}</div>
-              <div class="muted small">Masuk ${escHtml((x.jam_masuk || '').slice(0, 5) || '—')} · Pulang ${escHtml((x.jam_pulang || '').slice(0, 5) || '—')}${apv}</div>
+              <b>${escHtml(x.tanggal)}</b>
+              <small>Masuk ${escHtml((x.jam_masuk || '').slice(0, 5) || '—')} · Pulang ${escHtml((x.jam_pulang || '').slice(0, 5) || '—')}${apv}</small>
             </div>
             <span class="badge badge-${escHtml(x.status || 'netral')}">${escHtml(labelStatus[x.status] || x.status)}</span>
-          </div>`;
-        }).join('') : '<p class="muted small">Belum ada riwayat kehadiran 14 hari terakhir.</p>';
+          </li>`;
+        }).join('') : '<li><div>Belum ada riwayat kehadiran 14 hari terakhir.</div></li>';
       } catch (err) {
-        listEl.innerHTML = `<p class="muted small">${escHtml(err.message || 'Gagal memuat riwayat.')}</p>`;
+        listEl.innerHTML = `<li><div>${escHtml(err.message || 'Gagal memuat riwayat.')}</div></li>`;
       }
     }
 
-    function updateModeHint() {
-      if (!activeLookup) return;
-      const a = activeLookup.aturan || {};
-      const st = activeLookup.hari_ini.state;
-      const modeUsed = st === 'in' ? selectedMode : ((activeLookup.hari_ini.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo');
-      const wfoHint = [
-        a.wajib_foto ? 'foto selfie' : null,
-        a.radius_masuk_m > 0 ? `area kantor maks ${a.radius_masuk_m} m` : (a.wajib_gps ? 'GPS aktif' : null)
-      ].filter(Boolean).join(' & ') || 'konfirmasi langsung';
-      const wfhHint = `${a.wajib_foto ? 'foto selfie & ' : ''}wajib isi catatan liputan/kegiatan`;
-      byId('qr-mode-hint').textContent = modeUsed === 'wfh' ? `Syarat Liputan/WFH: ${wfhHint}.` : `Syarat Kantor (WFO): ${wfoHint}.`;
-      byId('qr-keg-label').textContent = modeUsed === 'wfh'
-        ? 'Catatan Liputan / Kegiatan (Wajib diisi)'
-        : 'Catatan Kegiatan (Opsional untuk WFO)';
+    function renderModeOptions() {
+      byId('qr-mode-switch').innerHTML = activeDiv.modes.map((m) => `
+        <button type="button" class="mode${m[0] === selectedModeKey ? ' active' : ''}" data-mode="${escHtml(m[0])}" data-apimode="${escHtml(m[3])}">
+          <b>${escHtml(m[1])}</b><span>${escHtml(m[2])}</span>
+        </button>`).join('');
+    }
+
+    function updateNoteAndRule() {
+      const req = activeDiv.need.includes(selectedModeKey) || selectedApiMode === 'wfh';
+      byId('qr-keg-label').textContent = activeDiv.nl + (req ? ' (wajib)' : ' (opsional)');
+      byId('qr-kegiatan').placeholder = activeDiv.ph;
+      byId('qr-rule-note').textContent = activeDiv.rule;
     }
 
     function renderLookup(data) {
       activeLookup = data;
       const k = data.karyawan;
       const h = data.hari_ini;
+      const jDiv = data.jadwal_divisi || {};
+      const divKey = resolveDivKey(k);
+      activeDiv = DIV[divKey];
+      activeColor = jDiv.warna_kartu || activeDiv.c;
+
+      byId('qr-action-card').style.setProperty('--dv', activeColor);
+      byId('qr-banner').innerHTML = `<b>QR terbaca · ${escHtml(k.tim || activeDiv.n)}</b><span>Pilih mode kerja dan shift sesuai aturan divisi Anda.</span>`;
+
       byId('qr-placeholder').hidden = true;
       byId('qr-emp-panel').hidden = false;
+      byId('qr-izin-lock').hidden = true;
+      byId('qr-tab-izin').hidden = false;
       if (byId('qr-confirm-box')) byId('qr-confirm-box').hidden = true;
       byId('qr-submit-err').hidden = true;
       byId('qr-submit-ok').hidden = true;
@@ -513,7 +859,6 @@
       byId('qi-ok').hidden = true;
       byId('qi-mulai').value = localTodayISO();
       byId('qi-sampai').value = localTodayISO();
-      switchQTab('absen');
 
       const avatarBox = byId('qr-emp-avatar');
       if (k.foto_url) {
@@ -523,28 +868,25 @@
         avatarBox.textContent = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : String(k.nama || '?').slice(0, 2).toUpperCase();
       }
 
-      const jDiv = data.jadwal_divisi || {};
-      const schedLabel = jDiv.jam_masuk && jDiv.jam_pulang ? ` · ${jDiv.jam_masuk}–${jDiv.jam_pulang} WIB` : '';
       byId('qr-emp-nama').textContent = k.nama;
-      byId('qr-emp-meta').textContent = `${k.tim}${k.jabatan ? ' · ' + k.jabatan : ''}${schedLabel}`;
+      byId('qr-emp-meta').textContent = `${k.jabatan ? k.jabatan + ' · ' : ''}${k.tim || activeDiv.n} · ${activeQrCode}`;
 
       const tagsEl = byId('qr-emp-tags');
-      const tipeBadge = k.tipe === 'magang'
-        ? `<span class="badge badge-izin">Magang${k.tgl_selesai ? ' · s/d ' + escHtml(k.tgl_selesai) : ''}</span>`
-        : `<span class="badge badge-netral">Karyawan</span>`;
       const anomBadge = h.anomali ? `<span class="badge badge-terlambat">Anomali: ${escHtml(h.anomali)}</span>` : '';
-      tagsEl.innerHTML = tipeBadge + anomBadge;
+      tagsEl.innerHTML = anomBadge;
 
       const shiftSel = byId('qr-shift');
       if (shiftSel) {
         const divOpt = `<option value="">Sesuai Divisi (${jDiv.jam_masuk || '08:00'}–${jDiv.jam_pulang || '17:00'})</option>`;
-        const shiftOpts = (data.shifts || []).map((s) => `<option value="${s.id}">${s.nama} (${s.jam_masuk}–${s.jam_pulang})</option>`).join('');
+        const shiftOpts = (data.shifts || []).map((s) => `<option value="${s.id}">${escHtml(s.nama)} (${escHtml(s.jam_masuk)}–${escHtml(s.jam_pulang)})</option>`).join('');
         shiftSel.innerHTML = divOpt + shiftOpts;
         shiftSel.value = '';
       }
 
+      byId('qi-jenis').innerHTML = activeDiv.izin.map(([v, l]) => `<option value="${escHtml(v)}">${escHtml(l)}</option>`).join('');
+
       const digiBox = byId('qr-digital-card');
-      if (digiBox && window.qrcode && activeQrCode) {
+      if (digiBox && showDigitalCard && window.qrcode && activeQrCode) {
         try {
           const qr = qrcode(0, 'M');
           qr.addData(activeQrCode);
@@ -553,85 +895,95 @@
           byId('qr-digital-code').textContent = activeQrCode;
           digiBox.hidden = false;
         } catch (e) { digiBox.hidden = true; }
+      } else if (digiBox) {
+        digiBox.hidden = true;
       }
+
       const badgeEl = byId('qr-emp-badge');
       if (h.state === 'in') {
-        badgeEl.className = 'badge badge-netral';
-        badgeEl.textContent = 'Belum Absen Masuk';
+        badgeEl.className = 'pill';
+        badgeEl.textContent = 'Belum absen';
         byId('qr-done-box').hidden = true;
         byId('qr-form-box').hidden = false;
         byId('qr-mode-wrap').hidden = false;
-        if (byId('qr-shift-wrap')) byId('qr-shift-wrap').hidden = false;
+        byId('qr-shift-wrap').hidden = false;
         byId('qr-kegiatan').value = '';
-        selectedMode = 'wfo';
-        byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b.dataset.mode === 'wfo'));
-        byId('qr-submit-btn').textContent = 'Ambil Foto & Kirim Absen Masuk';
+        selectedModeKey = activeDiv.modes[0][0];
+        selectedApiMode = activeDiv.modes[0][3];
+        renderModeOptions();
+        byId('qr-submit-btn').disabled = false;
+        byId('qr-submit-btn').textContent = 'Ambil foto & kirim absen masuk';
       } else if (h.state === 'out') {
-        badgeEl.className = 'badge badge-hadir';
-        badgeEl.textContent = `Masuk ${String(h.jam_masuk || '').slice(0, 5)}${h.shift_nama ? ' · ' + h.shift_nama : ''}`;
+        badgeEl.className = 'pill in';
+        badgeEl.textContent = `Hadir ${String(h.jam_masuk || '').slice(0, 5)}`;
         byId('qr-done-box').hidden = true;
         byId('qr-form-box').hidden = false;
         byId('qr-mode-wrap').hidden = true;
-        if (byId('qr-shift-wrap')) byId('qr-shift-wrap').hidden = true;
-        selectedMode = (h.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo';
+        byId('qr-shift-wrap').hidden = true;
+        selectedApiMode = (h.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo';
         byId('qr-kegiatan').value = h.kegiatan || '';
-        byId('qr-submit-btn').textContent = 'Ambil Foto & Kirim Absen Pulang';
+        byId('qr-submit-btn').disabled = false;
+        byId('qr-submit-btn').textContent = 'Ambil foto & kirim absen pulang';
       } else {
-        badgeEl.className = 'badge badge-hadir';
-        badgeEl.textContent = 'Selesai Hari Ini';
+        badgeEl.className = 'pill out';
+        badgeEl.textContent = 'Sudah pulang';
         byId('qr-form-box').hidden = true;
         byId('qr-done-box').hidden = false;
         byId('qr-done-box').textContent = `Presensi hari ini lengkap: Masuk ${String(h.jam_masuk || '').slice(0, 5)} · Pulang ${String(h.jam_pulang || '').slice(0, 5)}.`;
       }
-      updateModeHint();
+      updateNoteAndRule();
     }
 
-    async function lookupQr(code) {
-      const clean = String(code || '').trim();
+    async function lookupQr(code, silentToast = false) {
+      const clean = String(code || '').trim().toUpperCase();
       const errEl = byId('qr-lookup-err');
       errEl.hidden = true;
       if (!clean) {
         errEl.textContent = 'Masukkan atau scan kode QR pribadi terlebih dahulu.';
         errEl.hidden = false;
+        toast('Masukkan atau scan kode QR pribadi dulu.');
         return;
       }
+      stopInlineScanner();
       try {
         const res = await Api.post('qr.lookup', { kode_qr: clean });
         activeQrCode = clean;
         byId('qr-manual-code').value = clean;
         renderLookup(res.data);
-        byId('qr-scan-status').textContent = `QR valid terdeteksi (${res.data.karyawan.nama}).`;
+        if (!silentToast) {
+          const first = String(res.data.karyawan.nama || '').trim().split(/\s+/)[0] || 'Anggota';
+          toast(`Halo, ${first}! Form disesuaikan untuk divisi ${res.data.karyawan.tim || 'Anda'}.`);
+        }
       } catch (err) {
-        errEl.textContent = err.message || 'Kode QR tidak dikenali.';
+        errEl.textContent = err.message || 'Kode QR tidak ditemukan. Periksa lagi kodenya.';
         errEl.hidden = false;
+        toast(err.message || 'Kode QR tidak ditemukan. Periksa lagi kodenya.');
       }
     }
 
     byId('qr-manual-form').addEventListener('submit', (e) => {
       e.preventDefault();
+      showDigitalCard = false;
       lookupQr(byId('qr-manual-code').value);
     });
 
-    byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((mBtn) => {
-      mBtn.addEventListener('click', () => {
-        selectedMode = mBtn.dataset.mode === 'wfh' ? 'wfh' : 'wfo';
-        byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b === mBtn));
-        updateModeHint();
-      });
+    byId('qr-mode-switch').addEventListener('click', (e) => {
+      const mBtn = e.target.closest('[data-mode]');
+      if (!mBtn) return;
+      selectedModeKey = mBtn.dataset.mode;
+      selectedApiMode = mBtn.dataset.apimode === 'wfh' ? 'wfh' : 'wfo';
+      byId('qr-mode-switch').querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('active', b === mBtn));
+      updateNoteAndRule();
     });
 
     byId('qr-scan-start').addEventListener('click', async () => {
-      const statusEl = byId('qr-scan-status');
       byId('qr-lookup-err').hidden = true;
       try {
         qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
         const video = byId('qr-video');
         video.srcObject = qrStream;
         await video.play();
-        byId('qr-cam-box').hidden = false;
-        byId('qr-scan-start').hidden = true;
-        byId('qr-scan-stop').hidden = false;
-        statusEl.textContent = 'Arahkan kamera ke QR Kartu Pers pribadi Anda…';
+        byId('qr-cam-box').classList.add('live');
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -644,7 +996,7 @@
             const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const code = jsQR(img.data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
             if (code && code.data) {
-              stopInlineScanner();
+              showDigitalCard = false;
               lookupQr(code.data);
               return;
             }
@@ -654,27 +1006,38 @@
         qrRaf = requestAnimationFrame(tick);
       } catch (err) {
         stopInlineScanner();
-        statusEl.textContent = 'Kamera tidak tersedia atau izin ditolak. Ketik kode QR pribadi Anda di kotak bawah.';
+        toast('Kamera tidak tersedia. Ketik kode QR pribadi Anda di kotak bawah.');
       }
     });
     byId('qr-scan-stop').addEventListener('click', stopInlineScanner);
 
     byId('qr-submit-btn').addEventListener('click', async () => {
       if (!activeLookup || !activeQrCode) return;
+
       const errEl = byId('qr-submit-err');
       const okEl = byId('qr-submit-ok');
       errEl.hidden = true;
       okEl.hidden = true;
 
-      const modeUsed = activeLookup.hari_ini.state === 'in'
-        ? selectedMode
+      const isCheckIn = activeLookup.hari_ini.state === 'in';
+      const modeUsed = isCheckIn
+        ? selectedApiMode
         : ((activeLookup.hari_ini.mode || 'wfo') === 'wfh' ? 'wfh' : 'wfo');
-      const kegiatanVal = byId('qr-kegiatan').value.trim();
-      if (modeUsed === 'wfh' && kegiatanVal.length < 3) {
-        errEl.textContent = 'Mohon isi catatan liputan / kegiatan minimal 3 karakter.';
-        errEl.hidden = false;
+      const rawKegiatan = byId('qr-kegiatan').value.trim();
+      const mustFillNote = isCheckIn
+        ? (activeDiv.need.includes(selectedModeKey) || modeUsed === 'wfh')
+        : (modeUsed === 'wfh');
+
+      if (mustFillNote && rawKegiatan.length < 3) {
         byId('qr-kegiatan').focus();
+        toast('Isi “' + activeDiv.nl + '” dulu. Wajib untuk mode ini.');
         return;
+      }
+
+      const modeObj = activeDiv.modes.find((m) => m[0] === selectedModeKey);
+      let kegiatanVal = rawKegiatan;
+      if (isCheckIn && modeUsed === 'wfh' && modeObj && selectedModeKey !== 'wfh' && rawKegiatan && !rawKegiatan.startsWith('[')) {
+        kegiatanVal = `[${modeObj[1]}] ${rawKegiatan}`;
       }
 
       const a = activeLookup.aturan || {};
@@ -689,13 +1052,13 @@
           radius: a.radius_masuk_m,
           latKantor: a.lat_kantor,
           lngKantor: a.lng_kantor,
-          title: activeLookup.hari_ini.state === 'in' ? 'Absen Masuk Ketik.com' : 'Absen Pulang Ketik.com'
+          title: isCheckIn ? 'Absen Masuk Ketik.com' : 'Absen Pulang Ketik.com'
         });
         const payload = {
           kode_qr: activeQrCode,
           mode: modeUsed,
           expected_state: activeLookup.hari_ini.state,
-          shift_id: activeLookup.hari_ini.state === 'in' && byId('qr-shift') ? (Number(byId('qr-shift').value) || 0) : 0,
+          shift_id: isCheckIn && byId('qr-shift') ? (Number(byId('qr-shift').value) || 0) : 0,
           kegiatan: kegiatanVal,
           foto: shot.foto,
           palsu: !!shot.palsu
@@ -707,12 +1070,14 @@
         }
         const prevLookup = activeLookup;
         const res = await Api.post('qr.absen', payload);
-        await lookupQr(activeQrCode);
+        await lookupQr(activeQrCode, true);
         showConfirmScreen(res.data || {}, prevLookup);
+        toast(res.pesan || 'Presensi berhasil dicatat.');
       } catch (err) {
         if (err.message !== 'dibatalkan') {
           errEl.textContent = err.message || 'Gagal menyimpan absen.';
           errEl.hidden = false;
+          toast(err.message || 'Gagal menyimpan absen.');
         }
       } finally {
         submitBtn.disabled = false;
@@ -724,20 +1089,19 @@
       if (!activeQrCode) return;
       const errEl = byId('qi-err');
       const okEl = byId('qi-ok');
-      const btn = byId('qi-submit');
+      const submitBtn = byId('qi-submit');
       errEl.hidden = true; okEl.hidden = true;
       const mulai = byId('qi-mulai').value;
       const sampai = byId('qi-sampai').value;
       const catatan = byId('qi-catatan').value.trim();
-      if (!mulai || !sampai || sampai < mulai) {
-        errEl.textContent = 'Rentang tanggal tidak valid.';
-        errEl.hidden = false; return;
-      }
+      if (!mulai || !sampai || !catatan) return toast('Lengkapi tanggal dan alasan pengajuan.');
+      if (sampai < mulai) return toast('Tanggal akhir tidak boleh sebelum tanggal mulai.');
+
       if (catatan.length < 3) {
         errEl.textContent = 'Mohon isi alasan minimal 3 karakter.';
         errEl.hidden = false; return;
       }
-      btn.disabled = true;
+      submitBtn.disabled = true;
       try {
         let foto = '';
         const fInput = byId('qi-foto');
@@ -754,19 +1118,31 @@
         });
         okEl.textContent = res.pesan || 'Pengajuan izin dikirim ke Admin.';
         okEl.hidden = false;
+        toast(res.pesan || 'Pengajuan terkirim ke admin.');
         byId('qi-catatan').value = '';
         if (fInput) fInput.value = '';
       } catch (err) {
         errEl.textContent = err.message || 'Gagal mengirim pengajuan.';
         errEl.hidden = false;
       } finally {
-        btn.disabled = false;
+        submitBtn.disabled = false;
       }
     });
 
-    // Jika karyawan membuka link Kartu QR Pribadi yang dikirim Admin (?kartu=... atau ?qr=...)
+    function syncOnlineState() {
+      const bar = byId('qr-offline-bar');
+      if (bar) bar.hidden = navigator.onLine !== false;
+    }
+    window.addEventListener('online', syncOnlineState);
+    window.addEventListener('offline', syncOnlineState);
+    syncOnlineState();
+
     const initQrParam = new URLSearchParams(location.search).get('kartu') || new URLSearchParams(location.search).get('qr') || '';
     if (initQrParam.trim()) {
+      if (window.history && typeof window.history.replaceState === 'function') {
+        window.history.replaceState(null, '', location.pathname);
+      }
+      showDigitalCard = true;
       switchTab('qr');
       lookupQr(initQrParam.trim());
     }

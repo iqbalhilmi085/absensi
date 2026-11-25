@@ -3,6 +3,7 @@
 /backend/data/*.sqlite3
 /backend/data/*.db
 /backend/data/foto/
+/backend/data/.app_secret
 
 # OS / editor
 .DS_Store

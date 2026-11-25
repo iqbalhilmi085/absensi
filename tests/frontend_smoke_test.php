@@ -63,6 +63,8 @@ check(str_contains($login, 'qr-self-tabs') && str_contains($login, "Api.post('qr
 check(str_contains($appJs, 'openImportModal') && str_contains($appJs, 'karyawan.revoke_qr') && str_contains($appJs, 'karyawan.delete') && str_contains($appJs, 'absensi.izin_approve') && str_contains($appJs, 'renderAuditSection') && str_contains($appJs, 'buildPrintableIdCardHtml'), 'app.js includes CSV import, card revocation, member deletion, izin approval, audit log, and 2-sided ID card print');
 check(str_contains($login, 'showConfirmScreen') && str_contains($css, '.qr-confirm-card') && str_contains($css, '.qr-id-photo'), 'login.html and app.css implement mobile confirmation view (including Tercatat di luar jadwal) and circular ID Card photo');
 check(str_contains($appJs, 'Rekap Per Divisi Hari Ini') && str_contains($appJs, 'id="emp-divisi"') && str_contains($appJs, 'weekly-matrix-wrap') && str_contains($appJs, 'Lintas hari'), 'app.js renders Dashboard per-division summary, Kelola Anggota filters, and Shift & Jadwal Mingguan');
+check(str_contains($appJs, 'safeSpreadsheetCell') && str_contains($appJs, 'openChangePasswordModal') && str_contains($appJs, "Api.post('libur.save'"), 'app.js neutralizes CSV/Excel formula injection, adds Admin password change & National Holidays');
+check(str_contains($login, 'replaceState') && str_contains($login, 'qr-offline-bar'), 'login.html clears ?kartu= token from URL history and handles offline indicator');
 check(!preg_match('/🌙|☀️|📍/u', $appJs), 'app.js remains free of emoji characters');
 
 exit($failures > 0 ? 1 : 0);

@@ -32,11 +32,33 @@ function valid_barcode(array $org, ?string $barcode): bool
     return strcasecmp($given, $expected) === 0;
 }
 
+function list_hari_libur(int $orgId): array
+{
+    $stmt = db()->prepare('SELECT id, tanggal, keterangan FROM hari_libur WHERE organisasi_id = ? ORDER BY tanggal ASC');
+    $stmt->execute([$orgId]);
+    return $stmt->fetchAll();
+}
+
+function is_hari_libur(int $orgId, string $date): bool
+{
+    static $cache = [];
+    if (!isset($cache[$orgId])) {
+        $stmt = db()->prepare('SELECT tanggal FROM hari_libur WHERE organisasi_id = ?');
+        $stmt->execute([$orgId]);
+        $cache[$orgId] = array_flip(array_column($stmt->fetchAll(), 'tanggal'));
+    }
+    return isset($cache[$orgId][$date]);
+}
+
 function is_hari_kerja(array $org, string $date): bool
 {
     $dow = (int) date('N', strtotime($date));
     $list = array_map('intval', explode(',', (string) $org['hari_kerja']));
-    return in_array($dow, $list, true);
+    if (!in_array($dow, $list, true)) {
+        return false;
+    }
+    $orgId = (int) ($org['id'] ?? 0);
+    return $orgId > 0 ? !is_hari_libur($orgId, $date) : true;
 }
 
 function hitung_status_masuk(array $org, string $jamMasuk): string
@@ -112,6 +134,17 @@ function list_shift_kerja(int $orgId): array
     return $stmt->fetchAll();
 }
 
+function find_active_shift(int $orgId, int $shiftId): array
+{
+    $st = db()->prepare('SELECT id, nama, jam_masuk, jam_pulang FROM shift_kerja WHERE id = ? AND organisasi_id = ? AND aktif = 1');
+    $st->execute([$shiftId, $orgId]);
+    $row = $st->fetch();
+    if (!$row) {
+        json_error('Shift kerja yang dipilih tidak ditemukan atau sudah tidak aktif.', 422);
+    }
+    return $row;
+}
+
 function resolve_employee_schedule(array $org, string $tim, ?int $shiftId = null): array
 {
     $orgId = (int) ($org['id'] ?? 1);
@@ -128,12 +161,7 @@ function resolve_employee_schedule(array $org, string $tim, ?int $shiftId = null
     }
 
     if ($shiftId !== null && $shiftId > 0) {
-        $st = $pdo->prepare('SELECT id, nama, jam_masuk, jam_pulang FROM shift_kerja WHERE id = ? AND organisasi_id = ? AND aktif = 1');
-        $st->execute([$shiftId, $orgId]);
-        $row = $st->fetch();
-        if (!$row) {
-            json_error('Shift kerja yang dipilih tidak ditemukan atau sudah tidak aktif.', 422);
-        }
+        $row = find_active_shift($orgId, $shiftId);
         return [
             'shift_id' => (int) $row['id'],
             'shift_nama' => $row['nama'],
@@ -329,18 +357,20 @@ function portrait_signed_url(int $userId, ?string $fotoFile): ?string
 
 function current_device_hash(): string
 {
+    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
     $ua = (string) ($_SERVER['HTTP_USER_AGENT'] ?? '');
     $devId = (string) ($_SERVER['HTTP_X_DEVICE_ID'] ?? '');
-    $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
-    return substr(hash('sha256', "{$ua}|{$devId}|{$ip}"), 0, 24);
+    return substr(hash('sha256', "{$ip}|{$ua}|{$devId}"), 0, 24);
 }
 
 function detect_checkin_anomalies(PDO $pdo, array $user, array $jadwal, array $gps, string $deviceHash, string $mode, string $jamNow): string
 {
     $flags = [];
     if ($deviceHash !== '') {
-        $st = $pdo->prepare('SELECT COUNT(DISTINCT pengguna_id) FROM absensi WHERE tanggal = ? AND device_hash = ? AND pengguna_id <> ?');
-        $st->execute([date('Y-m-d'), $deviceHash, (int) $user['id']]);
+        // Deteksi titip absen bila perangkat yang sama memindai anggota berbeda dalam jeda < 5 menit
+        $windowSince = date('Y-m-d H:i:s', time() - 300);
+        $st = $pdo->prepare('SELECT COUNT(DISTINCT pengguna_id) FROM absensi WHERE tanggal = ? AND device_hash = ? AND pengguna_id <> ? AND dibuat_pada >= ?');
+        $st->execute([date('Y-m-d'), $deviceHash, (int) $user['id'], $windowSince]);
         if ((int) $st->fetchColumn() > 0) {
             $flags[] = 'multi_perangkat';
         }
@@ -522,10 +552,15 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
     }
     $fotoName = save_photo($foto, $jenis);
 
+    $pdo = db();
+    $stKid = $pdo->prepare('SELECT id FROM karyawan WHERE legacy_pengguna_id = ? LIMIT 1');
+    $stKid->execute([(int) $user['id']]);
+    $karyawanIdVal = ($tmpKid = $stKid->fetchColumn()) ? (int) $tmpKid : null;
+
     $ts = date('Y-m-d H:i:s');
-    $insert = db()->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jenis_izin, approval_status, diproses_oleh, catatan, foto_masuk, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $update = db()->prepare('UPDATE absensi SET status = ?, jenis_izin = ?, approval_status = ?, diproses_oleh = ?, catatan = ?, foto_masuk = COALESCE(?, foto_masuk), diperbarui_pada = ? WHERE id = ?');
-    $find = db()->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ?');
+    $insert = $pdo->prepare('INSERT INTO absensi (karyawan_id, pengguna_id, tanggal, status, jenis_izin, approval_status, diproses_oleh, catatan, foto_masuk, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $update = $pdo->prepare('UPDATE absensi SET karyawan_id = COALESCE(karyawan_id, ?), status = ?, jenis_izin = ?, approval_status = ?, diproses_oleh = ?, catatan = ?, foto_masuk = COALESCE(?, foto_masuk), diperbarui_pada = ? WHERE id = ?');
+    $find = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ?');
 
     $cursor = strtotime($mulai);
     $end = strtotime($sampai);
@@ -548,9 +583,9 @@ function do_izin(array $user, string $jenis, string $mulai, string $sampai, stri
     $procBy = $autoApprove ? ($actorId ?: (int) $user['id']) : null;
     foreach ($dates as [$date, $row]) {
         if ($row) {
-            $update->execute([$dbStatus, $jenis, $approvalStatus, $procBy, $catatan, $fotoName, $ts, $row['id']]);
+            $update->execute([$karyawanIdVal, $dbStatus, $jenis, $approvalStatus, $procBy, $catatan, $fotoName, $ts, $row['id']]);
         } else {
-            $insert->execute([$user['id'], $date, $dbStatus, $jenis, $approvalStatus, $procBy, $catatan, $fotoName, $ts, $ts]);
+            $insert->execute([$karyawanIdVal, $user['id'], $date, $dbStatus, $jenis, $approvalStatus, $procBy, $catatan, $fotoName, $ts, $ts]);
         }
     }
     $count = count($dates);
@@ -583,8 +618,13 @@ function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $stat
         json_error('Karyawan tidak ditemukan pada organisasi ini.', 404);
     }
 
+    $pdo = db();
+    $stKid = $pdo->prepare('SELECT id FROM karyawan WHERE legacy_pengguna_id = ? LIMIT 1');
+    $stKid->execute([$penggunaId]);
+    $karyawanIdVal = ($tmpKid = $stKid->fetchColumn()) ? (int) $tmpKid : null;
+
     $ts = date('Y-m-d H:i:s');
-    $find = db()->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ?');
+    $find = $pdo->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal = ?');
     $find->execute([$penggunaId, $tanggal]);
     $row = $find->fetch();
 
@@ -596,11 +636,11 @@ function do_koreksi(array $actor, int $penggunaId, string $tanggal, string $stat
     }
 
     if ($row) {
-        $u = db()->prepare('UPDATE absensi SET status = ?, jam_masuk = ?, jam_pulang = ?, catatan = ?, dikoreksi_oleh = ?, diperbarui_pada = ? WHERE id = ?');
-        $u->execute([$status, $jm, $jp, $catatan, $actor['id'], $ts, $row['id']]);
+        $u = $pdo->prepare("UPDATE absensi SET karyawan_id = COALESCE(karyawan_id, ?), status = ?, jam_masuk = ?, jam_pulang = ?, approval_status = 'disetujui', catatan = ?, dikoreksi_oleh = ?, diperbarui_pada = ? WHERE id = ?");
+        $u->execute([$karyawanIdVal, $status, $jm, $jp, $catatan, $actor['id'], $ts, $row['id']]);
     } else {
-        $i = db()->prepare('INSERT INTO absensi (pengguna_id, tanggal, status, jam_masuk, jam_pulang, catatan, dikoreksi_oleh, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-        $i->execute([$penggunaId, $tanggal, $status, $jm, $jp, $catatan, $actor['id'], $ts, $ts]);
+        $i = $pdo->prepare("INSERT INTO absensi (karyawan_id, pengguna_id, tanggal, status, jam_masuk, jam_pulang, approval_status, catatan, dikoreksi_oleh, dibuat_pada, diperbarui_pada) VALUES (?, ?, ?, ?, ?, ?, 'disetujui', ?, ?, ?, ?)");
+        $i->execute([$karyawanIdVal, $penggunaId, $tanggal, $status, $jm, $jp, $catatan, $actor['id'], $ts, $ts]);
     }
     write_audit((int) $actor['id'], (int) $actor['organisasi_id'], 'koreksi_absensi', "pengguna={$penggunaId} {$tanggal} -> {$status}: {$catatan}");
 
@@ -649,10 +689,7 @@ function hitung_durasi_row(?string $jamMasuk, ?string $jamPulang): ?int
         $p += 86400;
     }
     $dur = max(0, (int) round(($p - $m) / 60));
-    if ($dur < 240) {
-        $dur = 480 - ($dur % 60);
-    }
-    return min(600, $dur);
+    return min(1440, $dur);
 }
 
 function hitung_hari_kerja_periode(array $org, string $start, string $end): int
@@ -724,19 +761,25 @@ function rekap_data(int $orgId, string $start, string $end, ?string $tim, bool $
             if ($maxTgl === null || $r['tanggal'] > $maxTgl) {
                 $maxTgl = $r['tanggal'];
             }
-            if ($r['jam_masuk']) {
+            if (!empty($r['jam_masuk']) || in_array($r['status'], ['hadir', 'terlambat'], true)) {
                 $hariTercatat++;
                 $hadirRows[] = $r;
-                $late = hitung_terlambat_row($r, org_jam_masuk($orgId), (int) org_toleransi($orgId)) ?? 0;
-                $lateMinutes += $late;
-                if ($late > 0) {
+                if (!empty($r['jam_masuk'])) {
+                    $late = hitung_terlambat_row($r, org_jam_masuk($orgId), (int) org_toleransi($orgId)) ?? 0;
+                    $lateMinutes += $late;
+                    if ($late > 0 || $r['status'] === 'terlambat') {
+                        $hadirTerlambat++;
+                    } else {
+                        $hadirTepat++;
+                    }
+                    $dur = hitung_durasi_row($r['jam_masuk'], $r['jam_pulang']);
+                    if ($dur !== null) {
+                        $workMinutes += $dur;
+                    }
+                } elseif ($r['status'] === 'terlambat') {
                     $hadirTerlambat++;
                 } else {
                     $hadirTepat++;
-                }
-                $dur = hitung_durasi_row($r['jam_masuk'], $r['jam_pulang']);
-                if ($dur !== null) {
-                    $workMinutes += $dur;
                 }
             } elseif (in_array($r['status'], ['izin', 'sakit', 'alpa'], true)) {
                 $notPresent++;
@@ -817,7 +860,7 @@ function dashboard_summary(int $orgId): array
     $stmt->execute([$orgId, 'karyawan']);
     $total = (int) $stmt->fetchColumn();
 
-    $stmt = db()->prepare('SELECT a.status, COUNT(*) c FROM absensi a JOIN pengguna u ON u.id = a.pengguna_id WHERE u.organisasi_id = ? AND a.tanggal = ? GROUP BY a.status');
+    $stmt = db()->prepare("SELECT a.status, COUNT(*) c FROM absensi a JOIN pengguna u ON u.id = a.pengguna_id WHERE u.organisasi_id = ? AND a.tanggal = ? AND COALESCE(a.approval_status, 'disetujui') <> 'ditolak' GROUP BY a.status");
     $stmt->execute([$orgId, $today]);
     $hadirSet = 0;
     foreach ($stmt->fetchAll() as $row) {
@@ -829,7 +872,7 @@ function dashboard_summary(int $orgId): array
     $counts['belum'] = max(0, $total - $hadirSet - $counts['izin'] - $counts['sakit'] - $counts['alpa']);
     $counts['total_karyawan'] = $total;
 
-    $stmt = db()->prepare("SELECT a.mode, COUNT(*) c FROM absensi a JOIN pengguna u ON u.id = a.pengguna_id WHERE u.organisasi_id = ? AND a.tanggal = ? AND a.status IN ('hadir', 'terlambat') GROUP BY a.mode");
+    $stmt = db()->prepare("SELECT a.mode, COUNT(*) c FROM absensi a JOIN pengguna u ON u.id = a.pengguna_id WHERE u.organisasi_id = ? AND a.tanggal = ? AND COALESCE(a.approval_status, 'disetujui') <> 'ditolak' AND a.status IN ('hadir', 'terlambat') GROUP BY a.mode");
     $stmt->execute([$orgId, $today]);
     foreach ($stmt->fetchAll() as $row) {
         if (($row['mode'] ?? '') === 'wfh') {
@@ -844,10 +887,10 @@ function dashboard_summary(int $orgId): array
     $stmt = db()->prepare("SELECT a.tanggal,
         SUM(CASE WHEN a.status IN ('hadir','terlambat') THEN 1 ELSE 0 END) hadir,
         SUM(CASE WHEN a.status = 'terlambat' THEN 1 ELSE 0 END) terlambat,
-        SUM(CASE WHEN a.status IN ('izin','sakit') THEN 1 ELSE 0 END) izin_sakit,
+        SUM(CASE WHEN a.status IN ('izin','sakit') AND COALESCE(a.approval_status, 'disetujui') <> 'ditolak' THEN 1 ELSE 0 END) izin_sakit,
         SUM(CASE WHEN a.status = 'alpa' THEN 1 ELSE 0 END) alpa
         FROM absensi a JOIN pengguna u ON u.id = a.pengguna_id
-        WHERE u.organisasi_id = ? AND a.tanggal BETWEEN ? AND ?
+        WHERE u.organisasi_id = ? AND a.tanggal BETWEEN ? AND ? AND COALESCE(a.approval_status, 'disetujui') <> 'ditolak'
         GROUP BY a.tanggal ORDER BY a.tanggal");
     $stmt->execute([$orgId, $start, $today]);
     $tren = $stmt->fetchAll();
@@ -882,7 +925,7 @@ function ringkasan_bulanan(int $userId): array
 {
     $awal = date('Y-m-01');
     $akhir = date('Y-m-t');
-    $stmt = db()->prepare('SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal BETWEEN ? AND ?');
+    $stmt = db()->prepare("SELECT * FROM absensi WHERE pengguna_id = ? AND tanggal BETWEEN ? AND ? AND COALESCE(approval_status, 'disetujui') <> 'ditolak'");
     $stmt->execute([$userId, $awal, $akhir]);
     $rows = $stmt->fetchAll();
     $out = ['hadir' => 0, 'terlambat' => 0, 'izin' => 0, 'sakit' => 0, 'alpa' => 0];

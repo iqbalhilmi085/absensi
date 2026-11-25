@@ -226,4 +226,35 @@ $auditRes = httpReq("{$base}/backend/api.php?action=audit.list", $cookieAdmin);
 $auditActions = array_column($auditRes['json']['data'] ?? [], 'aksi');
 check($auditRes['code'] === 200 && in_array('cabut_qr', $auditActions, true) && in_array('import_karyawan', $auditActions, true) && in_array('hapus_karyawan', $auditActions, true), 'audit.list records cabut_qr, import_karyawan, and hapus_karyawan');
 
+// karyawan.toggle (#1) works cleanly
+$toggleOff = httpReq("{$base}/backend/api.php?action=karyawan.toggle", $cookieAdmin, ['id' => (int) ($dinaRow['id'] ?? 0), 'aktif' => 0], $csrfAdmin);
+$toggleOn = httpReq("{$base}/backend/api.php?action=karyawan.toggle", $cookieAdmin, ['id' => (int) ($dinaRow['id'] ?? 0), 'aktif' => 1], $csrfAdmin);
+check($toggleOff['code'] === 200 && $toggleOn['code'] === 200, 'karyawan.toggle safely toggles active status');
+
+// karyawan.delete removes portrait photo file on disk (UU PDP)
+$tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAKElEQVQ4T2NkoBAwUqifYdQAhtEw4R8jIyMDw6gBFIaB0TBqAFUNAADsVgIVcT/FhgAAAABJRU5ErkJggg==';
+$phAdd = httpReq("{$base}/backend/api.php?action=karyawan.save", $cookieAdmin, [
+    'nama' => 'Foto Hapus', 'email' => 'foto@ketik.com', 'peran' => 'karyawan', 'tim' => 'Redaksi', 'foto' => $tinyPng,
+], $csrfAdmin);
+$phId = (int) ($phAdd['json']['id'] ?? 0);
+$phFile = (string) $pdo->query("SELECT foto FROM pengguna WHERE id = {$phId}")->fetchColumn();
+$phPath = FOTO_DIR . DIRECTORY_SEPARATOR . $phFile;
+$phExistsBefore = $phFile !== '' && is_file($phPath);
+httpReq("{$base}/backend/api.php?action=karyawan.delete", $cookieAdmin, ['id' => $phId], $csrfAdmin);
+clearstatcache(true, $phPath);
+check($phExistsBefore && !is_file($phPath), 'karyawan.delete removes uploaded portrait photo file from disk');
+
+// axel.dataset server-side pagination & search
+$pgRes = httpReq("{$base}/backend/api.php?action=axel.dataset&page=1&limit=1", $cookieAdmin);
+check($pgRes['code'] === 200 && isset($pgRes['json']['pagination']['total_pages']), 'axel.dataset supports server-side page/limit pagination');
+
+// Admin self-service change password
+$badCp = httpReq("{$base}/backend/api.php?action=auth.change_password", $cookieAdmin, ['kata_sandi_lama' => 'WrongPass1', 'kata_sandi_baru' => 'NewSecret123!'], $csrfAdmin);
+$goodCp = httpReq("{$base}/backend/api.php?action=auth.change_password", $cookieAdmin, ['kata_sandi_lama' => 'Secret123!', 'kata_sandi_baru' => 'NewSecret123!'], $csrfAdmin);
+$cookieAdmin2 = tempnam(sys_get_temp_dir(), 'ck_adm2_');
+$csrf2 = httpReq("{$base}/backend/api.php?action=auth.csrf", $cookieAdmin2)['json']['csrf'] ?? '';
+$relog = httpReq("{$base}/backend/api.php?action=auth.login", $cookieAdmin2, ['email' => 'admin@ketik.com', 'kata_sandi' => 'NewSecret123!'], $csrf2);
+@unlink($cookieAdmin2);
+check($badCp['code'] === 403 && $goodCp['code'] === 200 && $relog['code'] === 200, 'auth.change_password rejects wrong current password and updates login password');
+
 exit($failures > 0 ? 1 : 0);

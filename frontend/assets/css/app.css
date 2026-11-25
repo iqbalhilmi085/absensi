@@ -2109,12 +2109,191 @@ canvas.chart { width: 100%; height: 320px; display: block; }
   .tabbar button.active { color: var(--accent); background: var(--accent-soft); }
 }
 
+/* ---------- Portal Scan QR Adaptif per Divisi ---------- */
+.qr-viewfinder {
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  background: #050b16;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #8fa0ba;
+  font-size: 13px;
+  text-align: center;
+  padding: 28px;
+}
+.qr-viewfinder video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+.qr-viewfinder.live video { display: block; }
+.qr-viewfinder.live .qr-view-hint { display: none; }
+.qr-view-hint {
+  position: relative;
+  z-index: 1;
+  max-width: 240px;
+  line-height: 1.5;
+}
+.qr-corner {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+.qr-corner.tl { top: 18px; left: 18px; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.qr-corner.tr { top: 18px; right: 18px; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+.qr-corner.bl { bottom: 18px; left: 18px; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+.qr-corner.br { bottom: 18px; right: 18px; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+.qr-scan-line {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 18px;
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  display: none;
+  pointer-events: none;
+  z-index: 2;
+}
+.qr-viewfinder.live .qr-scan-line {
+  display: block;
+  animation: qrScanSweep 2.2s ease-in-out infinite alternate;
+}
+@keyframes qrScanSweep {
+  to { top: calc(100% - 20px); }
+}
+.qr-scan-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.qr-action-card { --dv: var(--accent); }
+.qr-div-banner {
+  background: var(--surface-subtle);
+  border: 1px solid var(--panel-border);
+  border-left: 4px solid var(--dv);
+  border-radius: 12px;
+  padding: 13px 15px;
+}
+.qr-div-banner b {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+}
+.qr-div-banner span {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.qr-emp-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--panel-border);
+}
+.qr-avatar-circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--dv);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 17px;
+}
+.qr-avatar-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.qr-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.qr-mode-grid .mode-opt.active {
+  border-color: var(--dv);
+  background: color-mix(in srgb, var(--dv) 12%, var(--panel-bg));
+}
+.qr-mode-grid .mode-opt.active .mode-opt-title {
+  color: var(--dv);
+}
+.qr-rule-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+}
+.qr-rule-ico {
+  color: var(--dv);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.qr-lock-box {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 28px 14px;
+  border: 1px dashed var(--panel-border);
+  border-radius: 12px;
+  font-size: 13.5px;
+}
+.qr-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(8px);
+  background: var(--text);
+  color: var(--bg-page);
+  padding: 11px 18px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 13.5px;
+  box-shadow: var(--panel-shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+  max-width: min(92vw, 460px);
+  text-align: center;
+  z-index: 95;
+}
+.qr-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.qr-toast.err {
+  background: var(--danger);
+  color: #ffffff;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+  .qr-viewfinder.live .qr-scan-line { animation: none; top: 50%; }
 }
 
 @media print {

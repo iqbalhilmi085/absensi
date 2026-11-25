@@ -35,6 +35,20 @@ function param_str(string $key, string $default = ''): string
 
 function route(string $action, string $method): void
 {
+    $writeActions = [
+        'auth.login', 'auth.logout', 'auth.change_password',
+        'org.update', 'divisi.save', 'divisi.delete',
+        'shift.save', 'shift.delete', 'libur.save', 'libur.delete',
+        'karyawan.save', 'karyawan.import', 'karyawan.delete',
+        'karyawan.toggle', 'karyawan.rotate_qr', 'karyawan.revoke_qr',
+        'qr.lookup', 'qr.absen', 'qr.riwayat', 'qr.izin',
+        'absensi.checkin', 'absensi.checkout', 'absensi.izin',
+        'absensi.izin_approve', 'absensi.koreksi', 'klaster.save',
+    ];
+    if (in_array($action, $writeActions, true) && $method !== 'POST') {
+        json_error('Gunakan metode POST.', 405);
+    }
+
     switch ($action) {
         case 'auth.csrf':
             json_response(['ok' => true, 'csrf' => csrf_token()]);
@@ -45,6 +59,11 @@ function route(string $action, string $method): void
                 json_error($res['error'], $res['status'] ?? 401);
             }
             json_response(['ok' => true, 'pengguna' => public_user($res['user'])]);
+
+        case 'auth.change_password':
+            $user = require_login();
+            change_admin_password($user, param_str('kata_sandi_lama'), param_str('kata_sandi_baru'));
+            json_response(['ok' => true, 'pesan' => 'Kata sandi Admin berhasil diperbarui.']);
 
         case 'auth.me':
             $user = require_login();
@@ -63,6 +82,7 @@ function route(string $action, string $method): void
                 'organisasi' => get_org($orgIdMeta),
                 'divisi_jadwal' => list_divisi_jadwal($orgIdMeta),
                 'shift_kerja' => list_shift_kerja($orgIdMeta),
+                'hari_libur' => list_hari_libur($orgIdMeta),
                 'preset' => preset_industri(),
                 'hari' => hari_label(),
                 'tanggal' => date('Y-m-d'),
@@ -107,12 +127,23 @@ function route(string $action, string $method): void
             json_response(['ok' => true, 'id' => $savedShift, 'data' => list_shift_kerja((int) $user['organisasi_id'])]);
 
         case 'shift.delete':
-            if ($method !== 'POST') {
-                json_error('Gunakan metode POST.', 405);
-            }
             $user = require_role(['admin']);
             delete_shift_kerja($user, (int) param('id', 0));
             json_response(['ok' => true, 'data' => list_shift_kerja((int) $user['organisasi_id'])]);
+
+        case 'libur.list':
+            $user = require_role(['admin']);
+            json_response(['ok' => true, 'data' => list_hari_libur((int) $user['organisasi_id'])]);
+
+        case 'libur.save':
+            $user = require_role(['admin']);
+            save_hari_libur($user, param_str('tanggal'), param_str('keterangan'));
+            json_response(['ok' => true, 'data' => list_hari_libur((int) $user['organisasi_id'])]);
+
+        case 'libur.delete':
+            $user = require_role(['admin']);
+            delete_hari_libur($user, (int) param('id', 0));
+            json_response(['ok' => true, 'data' => list_hari_libur((int) $user['organisasi_id'])]);
 
         case 'karyawan.list':
             $user = require_role(['admin', 'atasan']);
@@ -239,6 +270,9 @@ function route(string $action, string $method): void
             $expectedState = param_str('expected_state');
             $shiftIdRaw = param('shift_id', 0);
             $shiftId = is_numeric($shiftIdRaw) && (int) $shiftIdRaw > 0 ? (int) $shiftIdRaw : null;
+            if ($shiftId !== null) {
+                find_active_shift((int) $found['organisasi_id'], $shiftId);
+            }
             $rec = today_record((int) $found['id']);
 
             // Pencegahan double-scan tidak sengaja dalam 60 detik bila expected_state sudah tercatat
@@ -635,15 +669,6 @@ function list_karyawan(int $orgId): array
 {
     $pdo = db();
     $today = date('Y-m-d');
-    // Otomatis nonaktifkan peserta magang yang sudah melewati tanggal selesai
-    $expStmt = $pdo->prepare("SELECT id FROM pengguna WHERE organisasi_id = ? AND peran = 'karyawan' AND tipe = 'magang' AND tgl_selesai IS NOT NULL AND tgl_selesai <> '' AND tgl_selesai < ? AND aktif = 1");
-    $expStmt->execute([$orgId, $today]);
-    $expiredIds = array_column($expStmt->fetchAll(), 'id');
-    foreach ($expiredIds as $eid) {
-        $pdo->prepare('UPDATE pengguna SET aktif = 0 WHERE id = ?')->execute([(int) $eid]);
-        $pdo->prepare("UPDATE karyawan SET aktif = 0, status_kartu = 'kedaluwarsa' WHERE legacy_pengguna_id = ?")->execute([(int) $eid]);
-    }
-
     $stmt = $pdo->prepare("SELECT p.id, p.nama, p.email, p.no_hp, p.foto, p.peran, p.tim, p.jabatan, p.tipe, p.kampus, p.tgl_mulai, p.tgl_selesai, p.aktif, p.dibuat_pada,
             k.kode_qr, k.status_kartu, k.alasan_cabut, k.diterbitkan_pada, k.dicabut_pada, k.terakhir_dipakai
         FROM pengguna p
@@ -653,15 +678,11 @@ function list_karyawan(int $orgId): array
     $stmt->execute([$orgId]);
     $rows = $stmt->fetchAll();
 
+    // Read-only komputasi status kedaluwarsa magang tanpa menulis DB pada GET request
     foreach ($rows as &$r) {
-        if ($r['peran'] === 'karyawan' && empty($r['kode_qr'])) {
-            $newQr = generate_personal_qr($pdo);
-            $tsNow = $r['dibuat_pada'] ?: date('Y-m-d H:i:s');
-            $ins = $pdo->prepare("INSERT INTO karyawan (organisasi_id, nama, kode_qr, aktif, status_kartu, diterbitkan_pada, tim, jabatan, legacy_pengguna_id, dibuat_pada) VALUES (?, ?, ?, ?, 'aktif', ?, ?, ?, ?, ?)");
-            $ins->execute([$orgId, $r['nama'], $newQr, (int) $r['aktif'], $tsNow, $r['tim'], $r['jabatan'], (int) $r['id'], $tsNow]);
-            $r['kode_qr'] = $newQr;
-            $r['status_kartu'] = 'aktif';
-            $r['diterbitkan_pada'] = $tsNow;
+        if (($r['tipe'] ?? 'karyawan') === 'magang' && !empty($r['tgl_selesai']) && $r['tgl_selesai'] < $today) {
+            $r['aktif'] = 0;
+            $r['status_kartu'] = 'kedaluwarsa';
         }
         $r['foto_url'] = portrait_signed_url((int) $r['id'], $r['foto'] ?? null);
     }
@@ -954,6 +975,85 @@ function import_karyawan_batch(array $actor, array $payload): array
     return ['created' => $created, 'skipped' => $skipped, 'errors' => array_slice($errors, 0, 20)];
 }
 
+function change_admin_password(array $user, string $oldPass, string $newPass): void
+{
+    if ($oldPass === '' || !password_verify($oldPass, (string) ($user['kata_sandi'] ?? ''))) {
+        json_error('Kata sandi lama tidak cocok.', 403);
+    }
+    if (strlen($newPass) < MIN_ADMIN_PASSWORD) {
+        json_error('Kata sandi baru minimal ' . MIN_ADMIN_PASSWORD . ' karakter.', 422);
+    }
+    if (hash_equals($oldPass, $newPass)) {
+        json_error('Kata sandi baru harus berbeda dari kata sandi lama.', 422);
+    }
+    $hash = password_hash($newPass, PASSWORD_DEFAULT);
+    db()->prepare('UPDATE pengguna SET kata_sandi = ? WHERE id = ?')->execute([$hash, (int) $user['id']]);
+    start_session();
+    session_regenerate_id(true);
+    write_audit((int) $user['id'], (int) $user['organisasi_id'], 'ubah_sandi', 'Admin memperbarui kata sandi akun');
+}
+
+function save_hari_libur(array $actor, string $tanggal, string $keterangan): int
+{
+    if (!valid_iso_date($tanggal)) {
+        json_error('Format tanggal libur tidak valid (YYYY-MM-DD).', 422);
+    }
+    $ket = clean_text($keterangan, 150);
+    if ($ket === '') {
+        json_error('Keterangan hari libur wajib diisi.', 422);
+    }
+    $pdo = db();
+    $orgId = (int) $actor['organisasi_id'];
+    $chk = $pdo->prepare('SELECT id FROM hari_libur WHERE organisasi_id = ? AND tanggal = ?');
+    $chk->execute([$orgId, $tanggal]);
+    $existId = $chk->fetchColumn();
+    if ($existId) {
+        $pdo->prepare('UPDATE hari_libur SET keterangan = ? WHERE id = ?')->execute([$ket, (int) $existId]);
+        write_audit((int) $actor['id'], $orgId, 'save_libur', "{$tanggal} ({$ket})");
+        return (int) $existId;
+    }
+    $pdo->prepare('INSERT INTO hari_libur (organisasi_id, tanggal, keterangan, dibuat_pada) VALUES (?, ?, ?, ?)')
+        ->execute([$orgId, $tanggal, $ket, date('Y-m-d H:i:s')]);
+    $newId = (int) $pdo->lastInsertId();
+    write_audit((int) $actor['id'], $orgId, 'save_libur', "{$tanggal} ({$ket})");
+    return $newId;
+}
+
+function delete_hari_libur(array $actor, int $id): void
+{
+    $orgId = (int) $actor['organisasi_id'];
+    $st = db()->prepare('DELETE FROM hari_libur WHERE id = ? AND organisasi_id = ?');
+    $st->execute([$id, $orgId]);
+    if ($st->rowCount() === 0) {
+        json_error('Data hari libur tidak ditemukan.', 404);
+    }
+    write_audit((int) $actor['id'], $orgId, 'delete_libur', "id={$id}");
+}
+
+function toggle_karyawan(array $actor): void
+{
+    $id = (int) param('id', 0);
+    $aktif = (int) (bool) param('aktif', 0);
+    if ($id <= 0) {
+        json_error('ID anggota tidak valid.', 422);
+    }
+    if ($id === (int) $actor['id'] && $aktif === 0) {
+        json_error('Tidak dapat menonaktifkan akun Anda sendiri.', 422);
+    }
+    $pdo = db();
+    $orgId = (int) $actor['organisasi_id'];
+    $st = $pdo->prepare('SELECT id, nama FROM pengguna WHERE id = ? AND organisasi_id = ?');
+    $st->execute([$id, $orgId]);
+    $emp = $st->fetch();
+    if (!$emp) {
+        json_error('Anggota tidak ditemukan.', 404);
+    }
+    $pdo->prepare('UPDATE pengguna SET aktif = ? WHERE id = ? AND organisasi_id = ?')->execute([$aktif, $id, $orgId]);
+    $pdo->prepare("UPDATE karyawan SET aktif = ?, status_kartu = CASE WHEN status_kartu = 'dicabut' AND ? = 0 THEN 'dicabut' ELSE ? END WHERE legacy_pengguna_id = ? AND organisasi_id = ?")
+        ->execute([$aktif, $aktif, $aktif ? 'aktif' : 'kedaluwarsa', $id, $orgId]);
+    write_audit((int) $actor['id'], $orgId, 'toggle_karyawan', "id={$id} ({$emp['nama']}) aktif={$aktif}");
+}
+
 function delete_karyawan(array $actor, int $id): void
 {
     if ($id <= 0) {
@@ -964,11 +1064,31 @@ function delete_karyawan(array $actor, int $id): void
     }
     $pdo = db();
     $orgId = (int) $actor['organisasi_id'];
-    $st = $pdo->prepare('SELECT id, email, nama FROM pengguna WHERE id = ? AND organisasi_id = ?');
+    $st = $pdo->prepare('SELECT id, email, nama, foto FROM pengguna WHERE id = ? AND organisasi_id = ?');
     $st->execute([$id, $orgId]);
     $emp = $st->fetch();
     if (!$emp) {
         json_error('Anggota tidak ditemukan.', 404);
+    }
+    // Hapus berkas foto terkait (data pribadi UU PDP) agar tidak yatim di disk
+    $photoFiles = [];
+    if (!empty($emp['foto'])) {
+        $photoFiles[] = (string) $emp['foto'];
+    }
+    $stPh = $pdo->prepare('SELECT foto_masuk, foto_pulang FROM absensi WHERE pengguna_id = ?');
+    $stPh->execute([$id]);
+    foreach ($stPh->fetchAll() as $pr) {
+        if (!empty($pr['foto_masuk'])) $photoFiles[] = (string) $pr['foto_masuk'];
+        if (!empty($pr['foto_pulang'])) $photoFiles[] = (string) $pr['foto_pulang'];
+    }
+    foreach (array_unique($photoFiles) as $fn) {
+        $base = basename($fn);
+        if ($base !== '' && $base === $fn) {
+            $full = FOTO_DIR . DIRECTORY_SEPARATOR . $base;
+            if (is_file($full)) {
+                @unlink($full);
+            }
+        }
     }
     $pdo->prepare('DELETE FROM absensi WHERE pengguna_id = ?')->execute([$id]);
     $pdo->prepare('DELETE FROM karyawan WHERE legacy_pengguna_id = ? AND organisasi_id = ?')->execute([$id, $orgId]);
@@ -1076,7 +1196,7 @@ function daftar_harian(int $orgId, string $tanggal): array
 {
     $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, u.tipe, a.id AS absensi_id, a.status, a.jam_masuk, a.jam_pulang, a.mode, a.catatan, a.kegiatan, a.shift_nama, a.jam_jadwal_masuk, a.jam_jadwal_pulang, a.anomali, a.approval_status, a.jenis_izin, a.foto_masuk, a.foto_pulang, a.dikoreksi_oleh
         FROM pengguna u
-        LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ?
+        LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ? AND COALESCE(a.approval_status, 'disetujui') <> 'ditolak'
         WHERE u.organisasi_id = ? AND u.peran = 'karyawan' AND u.aktif = 1
         ORDER BY u.nama");
     $stmt->execute([$tanggal, $orgId]);
@@ -1100,94 +1220,6 @@ function daftar_izin(int $orgId, ?int $onlyUserId = null): array
     return $stmt->fetchAll();
 }
 
-function kiosk_info(): array
-{
-    $org = db()->query('SELECT * FROM organisasi ORDER BY id LIMIT 1')->fetch() ?: [];
-    $orgId = (int) ($org['id'] ?? 1);
-    $today = date('Y-m-d');
-    $stmt = db()->prepare("SELECT u.id, u.nama, u.tim, u.jabatan, a.status, a.jam_masuk, a.jam_pulang, a.catatan
-        FROM pengguna u
-        LEFT JOIN absensi a ON a.pengguna_id = u.id AND a.tanggal = ?
-        WHERE u.organisasi_id = ? AND u.peran = 'karyawan' AND u.aktif = 1
-        ORDER BY u.nama");
-    $stmt->execute([$today, $orgId]);
-    return [
-        'organisasi' => [
-            'id' => $orgId,
-            'nama' => $org['nama'] ?? APP_NAME,
-            'kode_lokasi' => $org['kode_lokasi'] ?? '',
-            'jam_masuk' => $org['jam_masuk'] ?? '06:00',
-            'jam_pulang' => $org['jam_pulang'] ?? '14:00',
-            'toleransi_menit' => (int) ($org['toleransi_menit'] ?? 15),
-            'wajib_foto' => (bool) ($org['wajib_foto'] ?? 0),
-            'wajib_barcode' => (bool) ($org['wajib_barcode'] ?? 0),
-            'wajib_gps' => (int) ($org['wajib_gps'] ?? 0) === 1,
-            'radius_masuk_m' => (int) ($org['radius_masuk_m'] ?? 0),
-            'lat_kantor' => isset($org['lat_kantor']) && $org['lat_kantor'] !== null ? (float) $org['lat_kantor'] : null,
-            'lng_kantor' => isset($org['lng_kantor']) && $org['lng_kantor'] !== null ? (float) $org['lng_kantor'] : null,
-        ],
-        'tanggal' => $today,
-        'jam_sekarang' => date('H:i:s'),
-        'karyawan' => $stmt->fetchAll(),
-    ];
-}
-
-function kiosk_absen(): array
-{
-    $penggunaId = (int) param('pengguna_id', 0);
-    $tipe = strtolower(trim((string) param('tipe', 'masuk')));
-    $shift = clean_text(param('shift', 'Pagi (06:00-14:00)'), 100);
-    $barcode = (string) param('barcode', '');
-    $foto = param('foto');
-
-    $stmt = db()->prepare("SELECT * FROM pengguna WHERE id = ? AND peran = 'karyawan' AND aktif = 1");
-    $stmt->execute([$penggunaId]);
-    $user = $stmt->fetch();
-    if (!$user) {
-        json_error('Pilih nama karyawan yang valid.', 422);
-    }
-
-    if ($tipe === 'pulang') {
-        $res = do_checkout(
-            $user,
-            $barcode,
-            $foto,
-            param('lat'),
-            param('lng'),
-            param('akurasi'),
-            'wfo',
-            (bool) param('palsu', false),
-            param('kegiatan') ? (string) param('kegiatan') : null
-        );
-        $res['pesan'] = "Presensi pulang {$user['nama']} berhasil dicatat ({$res['jam_pulang']})";
-        return $res;
-    }
-
-    $res = do_checkin(
-        $user,
-        $barcode,
-        $foto,
-        param('lat'),
-        param('lng'),
-        param('akurasi'),
-        'wfo',
-        (bool) param('palsu', false)
-    );
-    if ($shift !== '') {
-        $today = date('Y-m-d');
-        $org = get_org((int) $user['organisasi_id']);
-        $toleransi = (int) ($org['toleransi_menit'] ?? 15);
-        $rowCheck = ['tanggal' => $today, 'jam_masuk' => $res['jam_masuk'], 'catatan' => "Shift: {$shift}"];
-        $lateMin = hitung_terlambat_row($rowCheck, $org['jam_masuk'] ?? '06:00', $toleransi) ?? 0;
-        $statusShift = $lateMin > 0 ? 'terlambat' : 'hadir';
-        $upd = db()->prepare('UPDATE absensi SET catatan = ?, status = ? WHERE pengguna_id = ? AND tanggal = ?');
-        $upd->execute(["Shift: {$shift}", $statusShift, $user['id'], $today]);
-        $res['status'] = $statusShift;
-    }
-    $res['pesan'] = "Presensi masuk {$user['nama']} berhasil dicatat ({$res['jam_masuk']})";
-    return $res;
-}
-
 function axel_dataset(array $user): array
 {
     $orgId = (int) $user['organisasi_id'];
@@ -1206,6 +1238,9 @@ function axel_dataset(array $user): array
     if ($mode !== null && !in_array($mode, ['wfo', 'wfh'], true)) {
         $mode = null;
     }
+    $searchQ = strtolower(clean_text(param_str('q'), 100));
+    $page = max(0, (int) param('page', 0));
+    $limit = max(1, min(200, (int) param('limit', 50)));
 
     if (strtotime($sampai) < strtotime($dari)) {
         json_error('Tanggal selesai tidak boleh sebelum tanggal mulai.', 422);
@@ -1217,7 +1252,7 @@ function axel_dataset(array $user): array
             FROM absensi a
             JOIN pengguna u ON u.id = a.pengguna_id
             LEFT JOIN pengguna k ON k.id = a.dikoreksi_oleh
-            WHERE u.organisasi_id = ? AND a.tanggal BETWEEN ? AND ?";
+            WHERE u.organisasi_id = ? AND a.tanggal BETWEEN ? AND ? AND COALESCE(a.approval_status, 'disetujui') <> 'ditolak'";
     $params = [$orgId, $dari, $sampai];
     if ($karyawan > 0) {
         $sql .= ' AND u.id = ?';
@@ -1234,6 +1269,11 @@ function axel_dataset(array $user): array
     if ($mode) {
         $sql .= ' AND a.mode = ?';
         $params[] = $mode;
+    }
+    if ($searchQ !== '') {
+        $like = '%' . $searchQ . '%';
+        $sql .= ' AND (LOWER(u.nama) LIKE ? OR LOWER(u.tim) LIKE ? OR LOWER(a.kegiatan) LIKE ? OR LOWER(a.tanggal) LIKE ?)';
+        array_push($params, $like, $like, $like, $like);
     }
     $sql .= ' ORDER BY a.tanggal DESC, u.nama ASC';
 
@@ -1266,10 +1306,19 @@ function axel_dataset(array $user): array
     }
     $summary['rata_terlambat'] = $lateCount > 0 ? round($lateSum / $lateCount, 1) : 0;
 
+    $totalRows = count($out);
+    $pagedData = $page > 0 ? array_slice($out, ($page - 1) * $limit, $limit) : $out;
+
     return [
         'ok' => true,
-        'data' => $out,
+        'data' => $pagedData,
         'ringkasan' => $summary,
+        'pagination' => [
+            'page' => $page > 0 ? $page : 1,
+            'limit' => $page > 0 ? $limit : $totalRows,
+            'total' => $totalRows,
+            'total_pages' => $page > 0 ? max(1, (int) ceil($totalRows / $limit)) : 1,
+        ],
         'filter' => [
             'dari' => $dari,
             'sampai' => $sampai,
@@ -1277,6 +1326,7 @@ function axel_dataset(array $user): array
             'tim' => $tim,
             'status' => $status,
             'mode' => $mode,
+            'q' => $searchQ,
         ],
         'organisasi' => ['nama' => $org['nama'], 'industri' => $org['industri']],
     ];

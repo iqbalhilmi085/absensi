@@ -21,7 +21,9 @@ function send_security_headers(bool $isMedia = false): void
 function start_session(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
-        $isHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https'
+            || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
         session_set_cookie_params([
             'httponly' => true,
             'samesite' => 'Lax',
@@ -222,6 +224,9 @@ function save_photo(?string $dataUrl, string $prefix = 'foto'): ?string
         }
     }
 
+    if (!is_dir(FOTO_DIR)) {
+        @mkdir(FOTO_DIR, 0750, true);
+    }
     $ext = $petaMime[$mime];
     $name = $prefix . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
     $path = FOTO_DIR . DIRECTORY_SEPARATOR . $name;

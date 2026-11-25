@@ -10,6 +10,13 @@ function current_user(): ?array
     if (empty($_SESSION['pengguna_id'])) {
         return null;
     }
+    $now = time();
+    if (!empty($_SESSION['last_activity']) && ($now - (int) $_SESSION['last_activity']) > (SESSION_IDLE_MINUTES * 60)) {
+        $_SESSION = [];
+        session_destroy();
+        return null;
+    }
+    $_SESSION['last_activity'] = $now;
     static $user = null;
     if ($user !== null && (int) $user['id'] === (int) $_SESSION['pengguna_id']) {
         return $user;
@@ -150,6 +157,7 @@ function login(string $email, string $password): array
     start_session();
     session_regenerate_id(true);
     $_SESSION['pengguna_id'] = (int) $user['id'];
+    $_SESSION['last_activity'] = time();
     write_audit((int) $user['id'], (int) $user['organisasi_id'], 'login', $email);
 
     return ['ok' => true, 'status' => 200, 'error' => '', 'user' => $user];

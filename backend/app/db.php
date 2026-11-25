@@ -20,22 +20,39 @@ function db(): PDO
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         $pdo->exec('PRAGMA foreign_keys = ON');
         $pdo->exec('PRAGMA journal_mode = WAL');
-        init_schema($pdo);
+        $curVer = (int) $pdo->query('PRAGMA user_version')->fetchColumn();
+        if ($curVer < SCHEMA_VERSION) {
+            init_schema($pdo);
+            $pdo->exec('PRAGMA user_version = ' . SCHEMA_VERSION);
+        }
         return $pdo;
     }
 
-    // Koneksi ke server (tanpa nama basis data) agar bisa membuat DB bila belum ada.
-    $dsnBase = sprintf('mysql:host=%s;port=%d;charset=utf8mb4', DB_HOST, DB_PORT);
-    $pdo = new PDO($dsnBase, DB_USER, DB_PASS);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    if (AUTO_CREATE_DB) {
+        $dsnBase = sprintf('mysql:host=%s;port=%d;charset=utf8mb4', DB_HOST, DB_PORT);
+        $pdo = new PDO($dsnBase, DB_USER, DB_PASS);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec('CREATE DATABASE IF NOT EXISTS `' . DB_NAME . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+        $pdo->exec('USE `' . DB_NAME . '`');
+    } else {
+        $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', DB_HOST, DB_PORT, DB_NAME);
+        $pdo = new PDO($dsn, DB_USER, DB_PASS);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    }
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-
-    $pdo->exec('CREATE DATABASE IF NOT EXISTS `' . DB_NAME . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
-    $pdo->exec('USE `' . DB_NAME . '`');
     $pdo->exec("SET time_zone = '+07:00'");
 
-    init_schema($pdo);
+    $curVer = 0;
+    try {
+        $curVer = (int) $pdo->query('SELECT ver FROM schema_meta WHERE id = 1')->fetchColumn();
+    } catch (Throwable $e) {
+        $curVer = 0;
+    }
+    if ($curVer < SCHEMA_VERSION) {
+        init_schema($pdo);
+        $pdo->exec('INSERT INTO schema_meta (id, ver) VALUES (1, ' . SCHEMA_VERSION . ') ON DUPLICATE KEY UPDATE ver = ' . SCHEMA_VERSION);
+    }
     return $pdo;
 }
 
@@ -189,6 +206,21 @@ function init_schema(PDO $pdo): void
             aktif         TINYINT(1)   NOT NULL DEFAULT 1,
             CONSTRAINT fk_shift_org FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        "CREATE TABLE IF NOT EXISTS hari_libur (
+            id            INT AUTO_INCREMENT PRIMARY KEY,
+            organisasi_id INT          NOT NULL,
+            tanggal       DATE         NOT NULL,
+            keterangan    VARCHAR(150) NOT NULL,
+            dibuat_pada   DATETIME     NOT NULL,
+            UNIQUE KEY uq_libur_org_tgl (organisasi_id, tanggal),
+            CONSTRAINT fk_libur_org FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+
+        "CREATE TABLE IF NOT EXISTS schema_meta (
+            id  INT PRIMARY KEY,
+            ver INT NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     ];
 
     foreach ($statements as $sql) {
@@ -280,6 +312,7 @@ function init_schema_sqlite(PDO $pdo): void
             FOREIGN KEY (karyawan_id) REFERENCES karyawan(id) ON DELETE CASCADE
         )",
         'CREATE UNIQUE INDEX IF NOT EXISTS uq_absensi_karyawan_tgl ON absensi (karyawan_id, tanggal)',
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_absensi_pengguna_tgl ON absensi (pengguna_id, tanggal)',
         'CREATE INDEX IF NOT EXISTS idx_absensi_karyawan ON absensi (karyawan_id, tanggal)',
         'CREATE INDEX IF NOT EXISTS idx_absensi_pengguna ON absensi (pengguna_id, tanggal)',
 
@@ -339,6 +372,16 @@ function init_schema_sqlite(PDO $pdo): void
             jam_masuk     TEXT NOT NULL DEFAULT '08:00',
             jam_pulang    TEXT NOT NULL DEFAULT '17:00',
             aktif         INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
+        )",
+
+        "CREATE TABLE IF NOT EXISTS hari_libur (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            organisasi_id INTEGER NOT NULL,
+            tanggal       TEXT NOT NULL,
+            keterangan    TEXT NOT NULL,
+            dibuat_pada   TEXT NOT NULL,
+            UNIQUE (organisasi_id, tanggal),
             FOREIGN KEY (organisasi_id) REFERENCES organisasi(id) ON DELETE CASCADE
         )",
     ];
@@ -422,6 +465,27 @@ function migrate_schema(PDO $pdo): void
             if (!in_array($nama, $ada, true)) {
                 $pdo->exec("ALTER TABLE `{$tabel}` ADD COLUMN `{$nama}` {$sql}");
             }
+        }
+    }
+
+    // Bersihkan duplikat (pengguna_id, tanggal) sebelum pasang UNIQUE index
+    $dups = $pdo->query('SELECT pengguna_id, tanggal FROM absensi WHERE pengguna_id IS NOT NULL GROUP BY pengguna_id, tanggal HAVING COUNT(*) > 1')->fetchAll();
+    foreach ($dups as $d) {
+        $stD = $pdo->prepare('SELECT id FROM absensi WHERE pengguna_id = ? AND tanggal = ? ORDER BY (jam_masuk IS NOT NULL) DESC, (dikoreksi_oleh IS NOT NULL) DESC, id DESC');
+        $stD->execute([(int) $d['pengguna_id'], $d['tanggal']]);
+        $ids = array_column($stD->fetchAll(), 'id');
+        if (count($ids) > 1) {
+            $dropIds = array_map('intval', array_slice($ids, 1));
+            $pdo->exec('DELETE FROM absensi WHERE id IN (' . implode(',', $dropIds) . ')');
+        }
+    }
+    if (DB_DRIVER === 'sqlite') {
+        $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS uq_absensi_pengguna_tgl ON absensi (pengguna_id, tanggal)');
+    } else {
+        $stIdx = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'absensi' AND INDEX_NAME = 'uq_absensi_pengguna_tgl'");
+        $stIdx->execute();
+        if ((int) $stIdx->fetchColumn() === 0) {
+            $pdo->exec('ALTER TABLE absensi ADD UNIQUE KEY uq_absensi_pengguna_tgl (pengguna_id, tanggal)');
         }
     }
 }

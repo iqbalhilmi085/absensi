@@ -11,7 +11,7 @@ if ($uriPath === '/') {
 
 // Tolak akses langsung ke direktori/berkas sensitif pada PHP built-in server.
 $blockedPrefix = '#^/(\.git|\.agents|\.superpowers|docs|tests|backend/(?:app|data|migrasi|tools|uploads)|router\.php)(/|$)#i';
-$blockedExt    = '#\.(sqlite|sqlite3|db|sql|md|json|lock|log|ini|htaccess)$#i';
+$blockedExt    = '#\.(sqlite|sqlite3|db|sql|md|json|lock|log|ini|htaccess|app_secret)$#i';
 if (preg_match($blockedPrefix, $uriPath) || preg_match($blockedExt, $uriPath) || str_contains($uriPath, '..')) {
     http_response_code(403);
     header('Content-Type: text/plain; charset=utf-8');
@@ -27,6 +27,13 @@ if ($uriPath === '/backend/api.php' || $uriPath === '/backend/media.php') {
 
 $full = realpath(__DIR__ . $uriPath);
 if ($full !== false && is_file($full) && str_starts_with($full, realpath(__DIR__))) {
+    if (str_ends_with(strtolower($full), '.html')) {
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: DENY');
+        header('Referrer-Policy: strict-origin-when-cross-origin');
+        readfile($full);
+        return true;
+    }
     return false;
 }
 

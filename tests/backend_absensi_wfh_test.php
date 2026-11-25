@@ -238,4 +238,52 @@ check($apv['code'] === 200 && ($apv['json']['data']['approval_status'] ?? '') ==
 $rekapMagang = httpReq2("{$base}/backend/api.php?action=rekap&dari={$today}&sampai={$today}&tipe=magang", $ckAdmin);
 check($rekapMagang['code'] === 200 && count($rekapMagang['json']['data'] ?? []) === 1 && ($rekapMagang['json']['data'][0]['kampus'] ?? '') === 'UB', 'rekap?tipe=magang returns filtered magang certificate fields');
 
+// 8) Audit fixes: real work durations, HR koreksi without jam_masuk in rekap, rejected izin excluded from dashboard, UNIQUE(pengguna_id,tanggal), and National Holidays
+check(hitung_durasi_row('08:00:00', '08:30:00') === 30, 'hitung_durasi_row returns real 30m duration without fake 8h rewrite');
+check(hitung_durasi_row('07:00:00', '19:00:00') === 720, 'hitung_durasi_row preserves real 12h (720m) duration without 10h cap');
+
+// HR koreksi status=hadir without jam_masuk counts as present in rekap_data
+$korEmp = httpReq2("{$base}/backend/api.php?action=karyawan.save", $ckAdmin, [
+    'nama' => 'Koreksi Tanpa Jam', 'email' => 'kortj@ketik.com', 'peran' => 'karyawan', 'tim' => 'Redaksi',
+], $csrfAdmin);
+$korId = (int) ($korEmp['json']['id'] ?? 0);
+$korQr = (string) ($korEmp['json']['kode_qr'] ?? '');
+httpReq2("{$base}/backend/api.php?action=absensi.koreksi", $ckAdmin, [
+    'pengguna_id' => $korId, 'tanggal' => $today, 'status' => 'hadir', 'catatan' => 'Koreksi hadir lapangan tanpa jam',
+], $csrfAdmin);
+$rkKor = httpReq2("{$base}/backend/api.php?action=rekap&dari={$today}&sampai={$today}", $ckAdmin);
+$rkRow = array_values(array_filter($rkKor['json']['data'] ?? [], fn($r) => (int) $r['id'] === $korId))[0] ?? null;
+check(($rkRow['hari_tercatat'] ?? 0) === 1 && ($rkRow['persen_tidak_hadir'] ?? 100) == 0, 'HR koreksi hadir without jam_masuk counts as hari_tercatat=1 (0% absent) in rekap');
+
+// Rejected izin is NOT counted as izin on dashboard_summary
+$rejEmp = httpReq2("{$base}/backend/api.php?action=karyawan.save", $ckAdmin, [
+    'nama' => 'Izin Ditolak', 'email' => 'izrej@ketik.com', 'peran' => 'karyawan', 'tim' => 'Redaksi',
+], $csrfAdmin);
+$rejQr = (string) ($rejEmp['json']['kode_qr'] ?? '');
+httpReq2("{$base}/backend/api.php?action=qr.izin", $ckPub, [
+    'kode_qr' => $rejQr, 'jenis' => 'izin', 'mulai' => $today, 'sampai' => $today, 'catatan' => 'Uji tolak izin',
+], $csrfPub);
+$il2 = httpReq2("{$base}/backend/api.php?action=absensi.izin_list", $ckAdmin);
+$rejAbRow = array_values(array_filter($il2['json']['data'] ?? [], fn($x) => (int) $x['pengguna_id'] === (int) $rejEmp['json']['id']))[0] ?? null;
+httpReq2("{$base}/backend/api.php?action=absensi.izin_approve", $ckAdmin, ['id' => (int) ($rejAbRow['id'] ?? 0), 'keputusan' => 'ditolak'], $csrfAdmin);
+$dashAfterRej = httpReq2("{$base}/backend/api.php?action=dashboard", $ckAdmin);
+check(($dashAfterRej['json']['data']['hari_ini']['izin'] ?? -1) === 0, 'Rejected leave (ditolak) excluded from dashboard hari_ini.izin count');
+
+// UNIQUE(pengguna_id, tanggal) blocks duplicate rows even when karyawan_id IS NULL
+$dupThrown = false;
+try {
+    $stDup = $pdo->prepare("INSERT INTO absensi (karyawan_id, pengguna_id, tanggal, status, dibuat_pada, diperbarui_pada) VALUES (NULL, ?, '2026-01-15', 'izin', ?, ?)");
+    $stDup->execute([$korId, $today, $today]);
+    $stDup->execute([$korId, $today, $today]);
+} catch (PDOException $e) {
+    $dupThrown = true;
+}
+check($dupThrown, 'UNIQUE(pengguna_id, tanggal) prevents duplicate absensi rows even when karyawan_id IS NULL');
+
+// National holiday endpoint + is_hari_kerja exclusion
+$libDate = '2026-12-25';
+$addLib = httpReq2("{$base}/backend/api.php?action=libur.save", $ckAdmin, ['tanggal' => $libDate, 'keterangan' => 'Hari Natal'], $csrfAdmin);
+$orgRow = $pdo->query('SELECT * FROM organisasi LIMIT 1')->fetch();
+check($addLib['code'] === 200 && is_hari_kerja($orgRow, $libDate) === false, 'libur.save adds national holiday and is_hari_kerja returns false for holiday date');
+
 exit($failures > 0 ? 1 : 0);

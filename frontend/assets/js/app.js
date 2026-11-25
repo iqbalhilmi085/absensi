@@ -10,7 +10,8 @@
     axel: null,
     tim: [],
     divisiJadwal: [],
-    shiftKerja: []
+    shiftKerja: [],
+    hariLibur: []
   };
 
   // ---------------- Fungsi Bantu ----------------
@@ -195,14 +196,19 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  function safeSpreadsheetCell(val) {
+    const s = String(val ?? '');
+    return /^[=+\-@\t\r]/.test(s.trimStart()) ? "'" + s : s;
+  }
+
   function exportCsv(filename, columns, rows) {
-    const lines = [columns, ...rows].map((r) => r.map((c) => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';'));
+    const lines = [columns, ...rows].map((r) => r.map((c) => `"${safeSpreadsheetCell(c).replace(/"/g, '""')}"`).join(';'));
     downloadBlob('\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8', filename);
   }
 
   function exportExcel(filename, title, columns, rows) {
-    const head = columns.map((c) => `<th style="background:#0f172a;color:#ffffff;padding:6px 10px">${esc(c)}</th>`).join('');
-    const body = rows.map((r) => `<tr>${r.map((c) => `<td style="padding:5px 10px">${esc(c)}</td>`).join('')}</tr>`).join('');
+    const head = columns.map((c) => `<th style="background:#0f172a;color:#ffffff;padding:6px 10px">${esc(safeSpreadsheetCell(c))}</th>`).join('');
+    const body = rows.map((r) => `<tr>${r.map((c) => `<td style="padding:5px 10px">${esc(safeSpreadsheetCell(c))}</td>`).join('')}</tr>`).join('');
     const html = `<html><head><meta charset="utf-8"></head><body><h3>${esc(title)}</h3>
       <table border="1" cellspacing="0" cellpadding="4"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></body></html>`;
     downloadBlob('\ufeff' + html, 'application/vnd.ms-excel', filename);
@@ -1396,6 +1402,7 @@
               <div class="seg-tabs" role="tablist" aria-label="Menu Shift dan Jadwal">
                 <button type="button" class="seg-tab active" data-stab="shift">Shift</button>
                 <button type="button" class="seg-tab" data-stab="divisi">Divisi</button>
+                <button type="button" class="seg-tab" data-stab="libur">Hari Libur</button>
                 <button type="button" class="seg-tab" data-stab="mingguan">Jadwal Mingguan</button>
               </div>
             </div>
@@ -1425,8 +1432,18 @@
               </form>
             </div>
 
+            <div id="stab-libur" class="config-section" hidden>
+              <div class="config-section-title"><span class="step-num">L</span> Daftar Hari Libur Nasional / Cuti Bersama</div>
+              <div id="libur-list" class="stack" style="gap:8px"></div>
+              <form id="libur-add-form" class="filter-grid" style="grid-template-columns:1fr 1.6fr auto;gap:8px">
+                <input type="date" id="lib-tgl" required>
+                <input id="lib-ket" placeholder="Nama hari libur (mis. Idul Fitri / Tahun Baru)" required>
+                <button type="submit" class="btn btn-primary btn-sm">+ Libur</button>
+              </form>
+            </div>
+
             <div id="stab-mingguan" class="config-section" hidden>
-              <div class="config-section-title"><span class="step-num">C</span> Pratinjau Jadwal Minggu Ini (Sesuai Divisi &amp; Hari Kerja)</div>
+              <div class="config-section-title"><span class="step-num">C</span> Pratinjau Jadwal Minggu Ini (Sesuai Divisi, Hari Kerja &amp; Libur)</div>
               <div class="table-wrap" id="weekly-matrix-wrap"><p class="muted small">Memuat jadwal anggota…</p></div>
             </div>
           </div>
@@ -1439,6 +1456,7 @@
         view.querySelectorAll('[data-stab]').forEach((b) => b.classList.toggle('active', b === btn));
         byId('stab-shift').hidden = target !== 'shift';
         byId('stab-divisi').hidden = target !== 'divisi';
+        byId('stab-libur').hidden = target !== 'libur';
         byId('stab-mingguan').hidden = target !== 'mingguan';
         if (target === 'mingguan') renderWeeklyMatrix();
       });
@@ -1451,7 +1469,14 @@
         const { data } = await Api.get('karyawan.list');
         const members = (data || []).filter((k) => k.peran === 'karyawan' && Number(k.aktif) === 1).slice(0, 12);
         const workDays = new Set(String(state.org.hari_kerja || '1,2,3,4,5').split(',').map((x) => Number(x.trim())));
-        const days = [[1, 'Sen'], [2, 'Sel'], [3, 'Rab'], [4, 'Kam'], [5, 'Jum'], [6, 'Sab'], [7, 'Min']];
+        const libSet = new Set((state.hariLibur || []).map((l) => l.tanggal));
+        const now = new Date();
+        const mondayOffset = now.getDay() === 0 ? -6 : 1 - now.getDay();
+        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
+        const days = [1, 2, 3, 4, 5, 6, 7].map((num, idx) => {
+          const dObj = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + idx);
+          return [num, ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'][idx], todayISO(dObj)];
+        });
         wrap.innerHTML = members.length ? `<table>
           <thead><tr><th>Anggota</th>${days.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
           <tbody>${members.map((m) => {
@@ -1459,7 +1484,7 @@
             const lbl = dm ? `${dm.jam_masuk}` : `${state.org.jam_masuk}`;
             return `<tr>
               <td><div class="cell-stack"><span style="font-weight:600">${esc(m.nama)}</span><span class="cell-sub">${esc(m.tim)}</span></div></td>
-              ${days.map(([num]) => workDays.has(num)
+              ${days.map(([num, , iso]) => workDays.has(num) && !libSet.has(iso)
                 ? `<td><span class="badge badge-izin" style="font-size:11px;padding:2px 8px">${esc(lbl)}</span></td>`
                 : `<td><span class="badge badge-netral" style="font-size:11px;padding:2px 8px">Libur</span></td>`).join('')}
             </tr>`;
@@ -1469,6 +1494,44 @@
         wrap.innerHTML = `<p class="muted small">${esc(e.message)}</p>`;
       }
     }
+
+    function renderLiburList() {
+      const libEl = byId('libur-list');
+      if (!libEl) return;
+      libEl.innerHTML = (state.hariLibur || []).map((l) => `
+        <div class="mode-breakdown-row" style="padding:8px 12px">
+          <div>
+            <div style="font-weight:600;font-size:13px">${esc(l.keterangan)}</div>
+            <div class="cell-sub tabular">${fmtTanggal(l.tanggal)} (${esc(l.tanggal)})</div>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" data-del-lib="${l.id}">Hapus</button>
+        </div>`).join('') || '<p class="muted small">Belum ada hari libur nasional yang ditambahkan.</p>';
+      libEl.querySelectorAll('[data-del-lib]').forEach((b) => {
+        b.addEventListener('click', async () => {
+          try {
+            const res = await Api.post('libur.delete', { id: Number(b.dataset.delLib) });
+            state.hariLibur = res.data || [];
+            renderLiburList();
+            toast('Hari libur dihapus');
+          } catch (e) { toast(e.message, 'err'); }
+        });
+      });
+    }
+    renderLiburList();
+
+    byId('libur-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        const res = await Api.post('libur.save', {
+          tanggal: byId('lib-tgl').value,
+          keterangan: byId('lib-ket').value.trim()
+        });
+        state.hariLibur = res.data || [];
+        byId('lib-ket').value = '';
+        renderLiburList();
+        toast('Hari libur nasional ditambahkan');
+      } catch (err) { toast(err.message, 'err'); }
+    });
 
     function renderScheduleLists() {
       const divEl = byId('divisi-jadwal-list');
@@ -2501,6 +2564,45 @@
     setInterval(update, 1000);
   }
 
+  function openChangePasswordModal() {
+    const m = openModal(`
+      <div class="modal-head"><h2>Ubah Kata Sandi Admin</h2><button class="icon-btn" type="button" data-close>×</button></div>
+      <div class="form">
+        <label class="field"><span>Kata Sandi Saat Ini</span><input type="password" id="cp-old" autocomplete="current-password" required placeholder="Masukkan kata sandi lama"></label>
+        <label class="field"><span>Kata Sandi Baru (Min. 8 Karakter)</span><input type="password" id="cp-new" autocomplete="new-password" required placeholder="Masukkan kata sandi baru"></label>
+        <label class="field"><span>Ulangi Kata Sandi Baru</span><input type="password" id="cp-conf" autocomplete="new-password" required placeholder="Ulangi kata sandi baru"></label>
+        <div id="cp-err" class="alert alert-error" hidden></div>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button type="button" class="btn btn-secondary" data-close-btn>Batal</button>
+          <button type="button" class="btn btn-primary" id="cp-save">Simpan Sandi</button>
+        </div>
+      </div>`);
+    m.$('[data-close]').addEventListener('click', m.close);
+    m.$('[data-close-btn]').addEventListener('click', m.close);
+    m.$('#cp-save').addEventListener('click', async () => {
+      const errBox = m.$('#cp-err'); errBox.hidden = true;
+      const oldP = m.$('#cp-old').value;
+      const newP = m.$('#cp-new').value;
+      const confP = m.$('#cp-conf').value;
+      if (!oldP || newP.length < 8) {
+        errBox.textContent = 'Kata sandi baru minimal 8 karakter.';
+        errBox.hidden = false; return;
+      }
+      if (newP !== confP) {
+        errBox.textContent = 'Konfirmasi kata sandi baru tidak cocok.';
+        errBox.hidden = false; return;
+      }
+      try {
+        await Api.post('auth.change_password', { kata_sandi_lama: oldP, kata_sandi_baru: newP });
+        toast('Kata sandi Admin berhasil diperbarui');
+        m.close();
+      } catch (err) {
+        errBox.textContent = err.message || 'Gagal mengubah kata sandi.';
+        errBox.hidden = false;
+      }
+    });
+  }
+
   async function init() {
     initTheme();
     initTopbarClock();
@@ -2508,6 +2610,7 @@
       try { await Api.post('auth.logout', {}); } catch (e) {}
       location.href = 'login.html';
     });
+    byId('change-pass-btn')?.addEventListener('click', openChangePasswordModal);
 
     try {
       const meta = await Api.get('meta');
@@ -2515,6 +2618,7 @@
       state.presets = meta.preset; state.hariLabels = meta.hari;
       state.divisiJadwal = meta.divisi_jadwal || [];
       state.shiftKerja = meta.shift_kerja || [];
+      state.hariLibur = meta.hari_libur || [];
     } catch (e) {
       location.href = 'login.html';
       return;
